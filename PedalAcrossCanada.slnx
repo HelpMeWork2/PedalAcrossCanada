@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/docs/">
+    <File Path="docs/00-main-acceptance-criteria.md" />
+    <File Path="docs/01-epics.md" />
+    <File Path="docs/02-domain-model.md" />
+    <File Path="docs/03-api-outline.md" />
+    <File Path="docs/04-ui-pages.md" />
+    <File Path="docs/05-solution-architecture.md" />
+    <File Path="docs/06-build-order.md" />
+  </Folder>
+  <Project Path="PedalAcrossCanada.Server/PedalAcrossCanada.Server.csproj" />
+  <Project Path="PedalAcrossCanada.Shared/PedalAcrossCanada.Shared.csproj" />
+  <Project Path="PedalAcrossCanada/PedalAcrossCanada.csproj" />
+</Solution>
