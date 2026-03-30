@@ -26,5 +26,7 @@ builder.Services.AddScoped<AuthHttpService>();
 builder.Services.AddScoped<ApiClient>();
 builder.Services.AddScoped<EventHttpService>();
 builder.Services.AddScoped<MilestoneHttpService>();
+builder.Services.AddScoped<TeamHttpService>();
+builder.Services.AddScoped<ParticipantHttpService>();
 
 await builder.Build().RunAsync();

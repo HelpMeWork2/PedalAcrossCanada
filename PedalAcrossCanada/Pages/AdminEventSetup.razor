@@ -57,6 +57,10 @@ else
                                     <button class="btn btn-outline-primary" @onclick="() => ShowEditForm(ev)">Edit</button>
                                     <button class="btn btn-outline-info"
                                             @onclick="() => NavigateToMilestones(ev.Id)">Milestones</button>
+                                    <button class="btn btn-outline-info"
+                                            @onclick="() => NavigateToTeams(ev.Id)">Teams</button>
+                                    <button class="btn btn-outline-info"
+                                            @onclick="() => NavigateToParticipants(ev.Id)">Participants</button>
                                     @if (ev.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Draft)
                                     {
                                         <button class="btn btn-outline-success"
@@ -363,6 +367,16 @@ else
     private void NavigateToMilestones(Guid eventId)
     {
         Navigation.NavigateTo($"/admin/events/{eventId}/milestones");
+    }
+
+    private void NavigateToTeams(Guid eventId)
+    {
+        Navigation.NavigateTo($"/admin/events/{eventId}/teams");
+    }
+
+    private void NavigateToParticipants(Guid eventId)
+    {
+        Navigation.NavigateTo($"/admin/events/{eventId}/participants");
     }
 
     private static string GetStatusBadge(PedalAcrossCanada.Shared.Enums.EventStatus status) => status switch

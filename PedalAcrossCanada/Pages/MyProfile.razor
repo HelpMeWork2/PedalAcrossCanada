@@ -1,0 +1,212 @@
+@page "/profile"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject EventHttpService EventService
+@inject ParticipantHttpService ParticipantService
+@inject NavigationManager Navigation
+
+<PageTitle>My Profile - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">My Profile</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading profile..." />
+}
+else if (_event is null)
+{
+    <div class="alert alert-info">
+        There is no active event at this time.
+    </div>
+}
+else if (_participant is null)
+{
+    <div class="alert alert-warning">
+        You are not registered for the current event.
+        <button class="btn btn-success btn-sm ms-3" @onclick="NavigateToJoin">Join Now</button>
+    </div>
+}
+else
+{
+    <EventStatusBanner Event="_event" />
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-body p-4">
+                    @if (!_isEditing)
+                    {
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">Display Name</dt>
+                            <dd class="col-sm-8">@_participant.DisplayName</dd>
+
+                            <dt class="col-sm-4">Name</dt>
+                            <dd class="col-sm-8">@_participant.FirstName @_participant.LastName</dd>
+
+                            <dt class="col-sm-4">Email</dt>
+                            <dd class="col-sm-8">@_participant.WorkEmail</dd>
+
+                            <dt class="col-sm-4">Team</dt>
+                            <dd class="col-sm-8">@(_participant.TeamName ?? "None")</dd>
+
+                            <dt class="col-sm-4">Status</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge @(_participant.Status == ParticipantStatus.Active ? "bg-success" : "bg-secondary")">
+                                    @_participant.Status
+                                </span>
+                            </dd>
+
+                            <dt class="col-sm-4">Joined</dt>
+                            <dd class="col-sm-8">@_participant.JoinedAt.ToString("MMM d, yyyy")</dd>
+
+                            <dt class="col-sm-4">Leaderboard</dt>
+                            <dd class="col-sm-8">@(_participant.LeaderboardOptIn ? "Opted In" : "Opted Out")</dd>
+                        </dl>
+
+                        <button class="btn btn-primary mt-3" @onclick="StartEditing">Edit Profile</button>
+                    }
+                    else
+                    {
+                        <EditForm Model="_formModel" OnValidSubmit="HandleUpdateAsync">
+                            <DataAnnotationsValidator />
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">First Name</label>
+                                    <InputText class="form-control" @bind-Value="_formModel.FirstName" />
+                                    <ValidationMessage For="() => _formModel.FirstName" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Last Name</label>
+                                    <InputText class="form-control" @bind-Value="_formModel.LastName" />
+                                    <ValidationMessage For="() => _formModel.LastName" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Display Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.DisplayName" />
+                                <ValidationMessage For="() => _formModel.DisplayName" />
+                            </div>
+
+                            <div class="form-check mb-3">
+                                <InputCheckbox class="form-check-input" @bind-Value="_formModel.LeaderboardOptIn" />
+                                <label class="form-check-label">Show me on leaderboards</label>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-success" disabled="@_isSaving">
+                                    @if (_isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                    Save
+                                </button>
+                                <button type="button" class="btn btn-secondary" @onclick="CancelEditing">Cancel</button>
+                            </div>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private EventDto? _event;
+    private ParticipantDto? _participant;
+    private bool _isLoading = true;
+    private bool _isEditing;
+    private bool _isSaving;
+    private ProfileFormModel _formModel = new();
+    private Toast _toast = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _event = await EventService.GetActiveEventAsync();
+            if (_event is not null)
+            {
+                try
+                {
+                    _participant = await ParticipantService.GetMeAsync(_event.Id);
+                }
+                catch (HttpRequestException)
+                {
+                    _participant = null;
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load profile.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void StartEditing()
+    {
+        if (_participant is null) return;
+        _formModel = new ProfileFormModel
+        {
+            FirstName = _participant.FirstName,
+            LastName = _participant.LastName,
+            DisplayName = _participant.DisplayName,
+            LeaderboardOptIn = _participant.LeaderboardOptIn
+        };
+        _isEditing = true;
+    }
+
+    private void CancelEditing() => _isEditing = false;
+
+    private async Task HandleUpdateAsync()
+    {
+        if (_event is null || _participant is null) return;
+
+        _isSaving = true;
+        try
+        {
+            var request = new UpdateParticipantRequest
+            {
+                FirstName = _formModel.FirstName,
+                LastName = _formModel.LastName,
+                DisplayName = _formModel.DisplayName,
+                LeaderboardOptIn = _formModel.LeaderboardOptIn
+            };
+
+            _participant = await ParticipantService.UpdateAsync(_event.Id, _participant.Id, request);
+            _toast.ShowSuccess("Profile updated.");
+            _isEditing = false;
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Update failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateToJoin() => Navigation.NavigateTo("/join");
+
+    private class ProfileFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        public bool LeaderboardOptIn { get; set; } = true;
+    }
+}

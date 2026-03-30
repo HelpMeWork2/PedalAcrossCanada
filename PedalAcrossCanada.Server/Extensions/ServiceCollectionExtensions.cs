@@ -70,12 +70,27 @@ public static class ServiceCollectionExtensions
 
         services.AddAuthorization();
 
+        // Data Protection (for Strava token encryption)
+        services.AddDataProtection();
+
+        // Strava configuration
+        services.Configure<StravaSettings>(configuration.GetSection(StravaSettings.SectionName));
+
+        // HttpClientFactory for external API calls
+        services.AddHttpClient("Strava");
+
         // Application services
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IEventService, EventService>();
         services.AddScoped<IMilestoneService, MilestoneService>();
+        services.AddScoped<ITeamService, TeamService>();
+        services.AddScoped<IParticipantService, ParticipantService>();
+        services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+        services.AddScoped<IStravaTokenService, StravaTokenService>();
+        services.AddScoped<IStravaApiClient, StravaApiClient>();
+        services.AddScoped<IStravaSyncService, StravaSyncService>();
 
         return services;
     }

@@ -1,0 +1,275 @@
+@page "/admin/events/{EventId:guid}/participants"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject ParticipantHttpService ParticipantService
+@inject TeamHttpService TeamService
+@inject EventHttpService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Participants - Pedal Across Canada</PageTitle>
+
+<Toast @ref="_toast" />
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Participants</h3>
+    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateBack">← Back to Events</button>
+</div>
+
+@if (_event is not null)
+{
+    <EventStatusBanner Event="_event" />
+}
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading participants..." />
+}
+else
+{
+    @if (_participants.Count == 0)
+    {
+        <div class="alert alert-info">No participants registered for this event yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Display Name</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Team</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                        <th>Leaderboard</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _participants)
+                    {
+                        <tr class="@(p.Status == ParticipantStatus.Inactive ? "table-secondary" : "")">
+                            <td>@p.DisplayName</td>
+                            <td>@p.FirstName @p.LastName</td>
+                            <td>@p.WorkEmail</td>
+                            <td>@(p.TeamName ?? "—")</td>
+                            <td>
+                                <span class="badge @(p.Status == ParticipantStatus.Active ? "bg-success" : "bg-secondary")">
+                                    @p.Status
+                                </span>
+                            </td>
+                            <td>@p.JoinedAt.ToString("MMM d, yyyy")</td>
+                            <td>@(p.LeaderboardOptIn ? "Yes" : "No")</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    @if (p.Status == ParticipantStatus.Active)
+                                    {
+                                        <button class="btn btn-outline-warning"
+                                                @onclick="() => DeactivateAsync(p.Id)">Deactivate</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-outline-success"
+                                                @onclick="() => ReactivateAsync(p.Id)">Reactivate</button>
+                                    }
+                                    <button class="btn btn-outline-info"
+                                            @onclick="() => ShowChangeTeamForm(p)">Change Team</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* Pagination *@
+        @if (_totalPages > 1)
+        {
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage - 1)">Previous</button>
+                    </li>
+                    @for (var i = 1; i <= _totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(pageNum == _currentPage ? "active" : "")">
+                            <button class="page-link" @onclick="() => LoadPageAsync(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+
+    @* Change Team modal *@
+    @if (_showChangeTeamForm)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Change Team — @_changeTeamParticipantName</h5>
+                        <button type="button" class="btn-close" @onclick="CloseChangeTeamForm"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_teams.Count == 0)
+                        {
+                            <div class="alert alert-warning">No teams available.</div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Select Team</label>
+                                <InputSelect class="form-select" @bind-Value="_selectedTeamId">
+                                    <option value="">— Select —</option>
+                                    @foreach (var t in _teams)
+                                    {
+                                        <option value="@t.Id">@t.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseChangeTeamForm">Cancel</button>
+                        <button type="button" class="btn btn-primary"
+                                disabled="@(_isSaving || string.IsNullOrEmpty(_selectedTeamId))"
+                                @onclick="HandleChangeTeamAsync">
+                            @if (_isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Change Team
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+
+    private EventDto? _event;
+    private List<ParticipantDto> _participants = [];
+    private List<TeamDto> _teams = [];
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private Toast _toast = null!;
+
+    // Change team
+    private bool _showChangeTeamForm;
+    private Guid? _changeTeamParticipantId;
+    private string _changeTeamParticipantName = "";
+    private string _selectedTeamId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _event = await EventService.GetByIdAsync(EventId);
+            _teams = (await TeamService.GetAllAsync(EventId))?.ToList() ?? [];
+            await LoadPageAsync(1);
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        try
+        {
+            var result = await ParticipantService.GetAllAsync(EventId, page, 25);
+            if (result is not null)
+            {
+                _participants = result.Data.ToList();
+                _currentPage = result.Page;
+                _totalPages = result.TotalPages;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load participants.");
+        }
+    }
+
+    private async Task DeactivateAsync(Guid participantId)
+    {
+        try
+        {
+            await ParticipantService.DeactivateAsync(EventId, participantId);
+            _toast.ShowSuccess("Participant deactivated.");
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Deactivation failed: {ex.Message}");
+        }
+    }
+
+    private async Task ReactivateAsync(Guid participantId)
+    {
+        try
+        {
+            await ParticipantService.ReactivateAsync(EventId, participantId);
+            _toast.ShowSuccess("Participant reactivated.");
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Reactivation failed: {ex.Message}");
+        }
+    }
+
+    private void ShowChangeTeamForm(ParticipantDto participant)
+    {
+        _changeTeamParticipantId = participant.Id;
+        _changeTeamParticipantName = participant.DisplayName;
+        _selectedTeamId = participant.TeamId?.ToString() ?? "";
+        _showChangeTeamForm = true;
+    }
+
+    private void CloseChangeTeamForm() => _showChangeTeamForm = false;
+
+    private async Task HandleChangeTeamAsync()
+    {
+        if (!_changeTeamParticipantId.HasValue || !Guid.TryParse(_selectedTeamId, out var teamId))
+            return;
+
+        _isSaving = true;
+        try
+        {
+            await ParticipantService.ChangeTeamAsync(EventId, _changeTeamParticipantId.Value,
+                new ChangeTeamRequest { TeamId = teamId });
+            _toast.ShowSuccess("Team changed.");
+            CloseChangeTeamForm();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Operation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateBack() => Navigation.NavigateTo("/admin/events");
+}

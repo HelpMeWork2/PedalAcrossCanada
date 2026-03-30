@@ -1,0 +1,315 @@
+@page "/admin/events/{EventId:guid}/teams"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject TeamHttpService TeamService
+@inject ParticipantHttpService ParticipantService
+@inject EventHttpService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Teams - Pedal Across Canada</PageTitle>
+
+<Toast @ref="_toast" />
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Teams</h3>
+    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateBack">← Back to Events</button>
+</div>
+
+@if (_event is not null)
+{
+    <EventStatusBanner Event="_event" />
+}
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading teams..." />
+}
+else
+{
+    <div class="mb-3">
+        <button class="btn btn-primary" @onclick="ShowCreateForm">
+            <i class="bi bi-plus-circle"></i> Create Team
+        </button>
+    </div>
+
+    @if (_teams.Count == 0)
+    {
+        <div class="alert alert-info">No teams have been created yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Captain</th>
+                        <th>Members</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var team in _teams)
+                    {
+                        <tr>
+                            <td>@team.Name</td>
+                            <td class="text-truncate" style="max-width: 250px;">@team.Description</td>
+                            <td>@(team.CaptainDisplayName ?? "—")</td>
+                            <td>@team.MemberCount</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary"
+                                            @onclick="() => ShowEditForm(team)">Edit</button>
+                                    <button class="btn btn-outline-info"
+                                            @onclick="() => ShowSetCaptainForm(team)">Set Captain</button>
+                                    <button class="btn btn-outline-danger"
+                                            @onclick="() => DeleteTeamAsync(team.Id)"
+                                            disabled="@(team.MemberCount > 0)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* Create/Edit modal *@
+    @if (_showForm)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_isEditing ? "Edit Team" : "Create Team")</h5>
+                        <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                    </div>
+                    <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
+                        <DataAnnotationsValidator />
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.Name" />
+                                <ValidationMessage For="() => _formModel.Name" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <InputTextArea class="form-control" @bind-Value="_formModel.Description" rows="3" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                                @if (_isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                @(_isEditing ? "Save Changes" : "Create")
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Set Captain modal *@
+    @if (_showCaptainForm)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Set Captain — @_captainTeamName</h5>
+                        <button type="button" class="btn-close" @onclick="CloseCaptainForm"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_participants.Count == 0)
+                        {
+                            <div class="alert alert-warning">No participants registered for this event yet.</div>
+                        }
+                        else
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Select Participant</label>
+                                <InputSelect class="form-select" @bind-Value="_selectedCaptainId">
+                                    <option value="">— Select —</option>
+                                    @foreach (var p in _participants)
+                                    {
+                                        <option value="@p.Id">@p.DisplayName (@p.WorkEmail)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseCaptainForm">Cancel</button>
+                        <button type="button" class="btn btn-primary" disabled="@(_isSaving || string.IsNullOrEmpty(_selectedCaptainId))"
+                                @onclick="HandleSetCaptainAsync">
+                            @if (_isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Set Captain
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+
+    private EventDto? _event;
+    private List<TeamDto> _teams = [];
+    private List<ParticipantDto> _participants = [];
+    private bool _isLoading = true;
+    private bool _showForm;
+    private bool _isEditing;
+    private bool _isSaving;
+    private Guid? _editingTeamId;
+    private TeamFormModel _formModel = new();
+    private Toast _toast = null!;
+
+    // Captain selection
+    private bool _showCaptainForm;
+    private Guid? _captainTeamId;
+    private string _captainTeamName = "";
+    private string _selectedCaptainId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _event = await EventService.GetByIdAsync(EventId);
+            _teams = (await TeamService.GetAllAsync(EventId))?.ToList() ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        _formModel = new TeamFormModel();
+        _isEditing = false;
+        _editingTeamId = null;
+        _showForm = true;
+    }
+
+    private void ShowEditForm(TeamDto team)
+    {
+        _formModel = new TeamFormModel { Name = team.Name, Description = team.Description };
+        _isEditing = true;
+        _editingTeamId = team.Id;
+        _showForm = true;
+    }
+
+    private void CloseForm() => _showForm = false;
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            if (_isEditing && _editingTeamId.HasValue)
+            {
+                await TeamService.UpdateAsync(EventId, _editingTeamId.Value,
+                    new UpdateTeamRequest { Name = _formModel.Name, Description = _formModel.Description });
+                _toast.ShowSuccess("Team updated.");
+            }
+            else
+            {
+                await TeamService.CreateAsync(EventId,
+                    new CreateTeamRequest { Name = _formModel.Name, Description = _formModel.Description });
+                _toast.ShowSuccess("Team created.");
+            }
+            CloseForm();
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Operation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteTeamAsync(Guid teamId)
+    {
+        try
+        {
+            await TeamService.DeleteAsync(EventId, teamId);
+            _toast.ShowSuccess("Team deleted.");
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Delete failed: {ex.Message}");
+        }
+    }
+
+    private async Task ShowSetCaptainForm(TeamDto team)
+    {
+        _captainTeamId = team.Id;
+        _captainTeamName = team.Name;
+        _selectedCaptainId = team.CaptainParticipantId?.ToString() ?? "";
+        try
+        {
+            var result = await ParticipantService.GetAllAsync(EventId, 1, 200);
+            _participants = result?.Data?.ToList() ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load participants.");
+        }
+        _showCaptainForm = true;
+    }
+
+    private void CloseCaptainForm() => _showCaptainForm = false;
+
+    private async Task HandleSetCaptainAsync()
+    {
+        if (!_captainTeamId.HasValue || !Guid.TryParse(_selectedCaptainId, out var participantId))
+            return;
+
+        _isSaving = true;
+        try
+        {
+            await TeamService.SetCaptainAsync(EventId, _captainTeamId.Value,
+                new SetCaptainRequest { ParticipantId = participantId });
+            _toast.ShowSuccess("Captain set.");
+            CloseCaptainForm();
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Operation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateBack() => Navigation.NavigateTo("/admin/events");
+
+    private class TeamFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string? Description { get; set; }
+    }
+}

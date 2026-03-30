@@ -8,6 +8,7 @@
     <File Path="docs/05-solution-architecture.md" />
     <File Path="docs/06-build-order.md" />
   </Folder>
+  <Project Path="PedalAcrossCanada.Server.Tests/PedalAcrossCanada.Server.Tests.csproj" />
   <Project Path="PedalAcrossCanada.Server/PedalAcrossCanada.Server.csproj" />
   <Project Path="PedalAcrossCanada.Shared/PedalAcrossCanada.Shared.csproj" />
   <Project Path="PedalAcrossCanada/PedalAcrossCanada.csproj" />

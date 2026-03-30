@@ -1,0 +1,195 @@
+@page "/join"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject EventHttpService EventService
+@inject TeamHttpService TeamService
+@inject ParticipantHttpService ParticipantService
+@inject NavigationManager Navigation
+
+<PageTitle>Join Event - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Join the Challenge</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading event..." />
+}
+else if (_event is null)
+{
+    <div class="alert alert-info">There is no active event to join at this time.</div>
+}
+else if (_alreadyRegistered)
+{
+    <div class="alert alert-success">
+        <h5>You're already registered!</h5>
+        <p>You joined <strong>@_event.Name</strong> on @_existingParticipant!.JoinedAt.ToString("MMM d, yyyy").</p>
+        <button class="btn btn-primary" @onclick="NavigateToProfile">Go to My Profile</button>
+    </div>
+}
+else
+{
+    <EventStatusBanner Event="_event" />
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-body p-4">
+                    <h5 class="card-title mb-3">Register for @_event.Name</h5>
+
+                    <EditForm Model="_formModel" OnValidSubmit="HandleRegisterAsync">
+                        <DataAnnotationsValidator />
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">First Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.FirstName" />
+                                <ValidationMessage For="() => _formModel.FirstName" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Last Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.LastName" />
+                                <ValidationMessage For="() => _formModel.LastName" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Work Email</label>
+                            <InputText class="form-control" @bind-Value="_formModel.WorkEmail" />
+                            <ValidationMessage For="() => _formModel.WorkEmail" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Display Name</label>
+                            <InputText class="form-control" @bind-Value="_formModel.DisplayName" />
+                            <ValidationMessage For="() => _formModel.DisplayName" />
+                            <div class="form-text">This is the name shown on leaderboards.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Team (optional)</label>
+                            <InputSelect class="form-select" @bind-Value="_formModel.SelectedTeamId">
+                                <option value="">— No team —</option>
+                                @foreach (var t in _teams)
+                                {
+                                    <option value="@t.Id">@t.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_formModel.LeaderboardOptIn" />
+                            <label class="form-check-label">Show me on leaderboards</label>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100" disabled="@_isSaving">
+                            @if (_isSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Join Event
+                        </button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private EventDto? _event;
+    private List<TeamDto> _teams = [];
+    private ParticipantDto? _existingParticipant;
+    private bool _alreadyRegistered;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private JoinFormModel _formModel = new();
+    private Toast _toast = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _event = await EventService.GetActiveEventAsync();
+            if (_event is not null)
+            {
+                _teams = (await TeamService.GetAllAsync(_event.Id))?.ToList() ?? [];
+
+                try
+                {
+                    _existingParticipant = await ParticipantService.GetMeAsync(_event.Id);
+                    _alreadyRegistered = true;
+                }
+                catch (HttpRequestException)
+                {
+                    _alreadyRegistered = false;
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load event data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        if (_event is null) return;
+
+        _isSaving = true;
+        try
+        {
+            Guid? teamId = Guid.TryParse(_formModel.SelectedTeamId, out var parsed) ? parsed : null;
+
+            var request = new CreateParticipantRequest
+            {
+                FirstName = _formModel.FirstName,
+                LastName = _formModel.LastName,
+                WorkEmail = _formModel.WorkEmail,
+                DisplayName = _formModel.DisplayName,
+                TeamId = teamId,
+                LeaderboardOptIn = _formModel.LeaderboardOptIn
+            };
+
+            await ParticipantService.CreateAsync(_event.Id, request);
+            _toast.ShowSuccess("Welcome to the challenge! 🚴");
+            Navigation.NavigateTo("/profile");
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Registration failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void NavigateToProfile() => Navigation.NavigateTo("/profile");
+
+    private class JoinFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        [System.ComponentModel.DataAnnotations.MaxLength(256)]
+        public string WorkEmail { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        public string? SelectedTeamId { get; set; }
+
+        public bool LeaderboardOptIn { get; set; } = true;
+    }
+}
