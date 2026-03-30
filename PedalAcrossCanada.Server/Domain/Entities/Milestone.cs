@@ -13,7 +13,7 @@ public class Milestone
     public string? RewardText { get; set; }
     public DateTime? AchievedAt { get; set; }
     public decimal? TotalKmAtAchievement { get; set; }
-    public AnnouncementStatus AnnouncementStatus { get; set; }
+    public AnnouncementStatus AnnouncementStatus { get; set; } = AnnouncementStatus.Pending;
     public string? AnnouncedBy { get; set; }
     public DateTime? AnnouncedAt { get; set; }
 

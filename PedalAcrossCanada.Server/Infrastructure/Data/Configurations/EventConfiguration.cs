@@ -22,13 +22,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
 
         builder.Property(e => e.ManualEntryMode)
             .HasConversion<string>()
-            .HasMaxLength(30)
-            .HasDefaultValue(ManualEntryMode.AllowedWithApproval);
-
-        builder.Property(e => e.StravaEnabled).HasDefaultValue(false);
-        builder.Property(e => e.MaxSingleRideKm).HasDefaultValue(300m);
-        builder.Property(e => e.LeaderboardPublic).HasDefaultValue(true);
-        builder.Property(e => e.ShowTeamAverage).HasDefaultValue(true);
+            .HasMaxLength(30);
 
         builder.HasMany(e => e.Milestones)
             .WithOne(m => m.Event)

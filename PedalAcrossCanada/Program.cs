@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using PedalAcrossCanada;
 using PedalAcrossCanada.Auth;
+using PedalAcrossCanada.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -19,5 +20,9 @@ builder.Services.AddBlazoredLocalStorage();
 builder.Services.AddScoped<JwtAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
     sp.GetRequiredService<JwtAuthStateProvider>());
+
+builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<AuthHttpService>();
+builder.Services.AddScoped<ApiClient>();
 
 await builder.Build().RunAsync();

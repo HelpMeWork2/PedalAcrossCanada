@@ -11,12 +11,12 @@ public class Event
     public DateTime EndDate { get; set; }
     public decimal RouteDistanceKm { get; set; }
     public EventStatus Status { get; set; }
-    public ManualEntryMode ManualEntryMode { get; set; }
+    public ManualEntryMode ManualEntryMode { get; set; } = ManualEntryMode.AllowedWithApproval;
     public bool StravaEnabled { get; set; }
     public string? BannerMessage { get; set; }
-    public decimal MaxSingleRideKm { get; set; }
-    public bool LeaderboardPublic { get; set; }
-    public bool ShowTeamAverage { get; set; }
+    public decimal MaxSingleRideKm { get; set; } = 300m;
+    public bool LeaderboardPublic { get; set; } = true;
+    public bool ShowTeamAverage { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

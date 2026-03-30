@@ -12,9 +12,9 @@ public class Participant
     public string WorkEmail { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public Guid? TeamId { get; set; }
-    public ParticipantStatus Status { get; set; }
+    public ParticipantStatus Status { get; set; } = ParticipantStatus.Active;
     public DateTime JoinedAt { get; set; }
-    public bool LeaderboardOptIn { get; set; }
+    public bool LeaderboardOptIn { get; set; } = true;
     public bool StravaConsentGiven { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

@@ -18,8 +18,7 @@ public class MilestoneConfiguration : IEntityTypeConfiguration<Milestone>
 
         builder.Property(m => m.AnnouncementStatus)
             .HasConversion<string>()
-            .HasMaxLength(30)
-            .HasDefaultValue(Shared.Enums.AnnouncementStatus.Pending);
+            .HasMaxLength(30);
 
         builder.HasIndex(m => new { m.EventId, m.OrderIndex }).IsUnique();
     }

@@ -1,0 +1,207 @@
+@page "/login"
+@layout PedalAcrossCanada.Layout.MainLayout
+@inject AuthHttpService AuthHttpService
+@inject NavigationManager Navigation
+
+<PageTitle>Login - Pedal Across Canada</PageTitle>
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-body p-4">
+                <h3 class="card-title text-center mb-4">Pedal Across Canada</h3>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">@_errorMessage</div>
+                }
+
+                <ul class="nav nav-tabs mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(_isLoginTab ? "active" : "")"
+                                type="button" @onclick="() => SwitchTab(true)">Login</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(!_isLoginTab ? "active" : "")"
+                                type="button" @onclick="() => SwitchTab(false)">Register</button>
+                    </li>
+                </ul>
+
+                @if (_isLoginTab)
+                {
+                    <EditForm Model="_loginModel" OnValidSubmit="HandleLoginAsync" FormName="login">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label for="loginEmail" class="form-label">Email</label>
+                            <InputText id="loginEmail" class="form-control" @bind-Value="_loginModel.Email" />
+                            <ValidationMessage For="() => _loginModel.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="loginPassword" class="form-label">Password</label>
+                            <InputText id="loginPassword" type="password" class="form-control" @bind-Value="_loginModel.Password" />
+                            <ValidationMessage For="() => _loginModel.Password" />
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" disabled="@_isLoading">
+                            @if (_isLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Sign In
+                        </button>
+                    </EditForm>
+                }
+                else
+                {
+                    <EditForm Model="_registerModel" OnValidSubmit="HandleRegisterAsync" FormName="register">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label for="regFirstName" class="form-label">First Name</label>
+                            <InputText id="regFirstName" class="form-control" @bind-Value="_registerModel.FirstName" />
+                            <ValidationMessage For="() => _registerModel.FirstName" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="regLastName" class="form-label">Last Name</label>
+                            <InputText id="regLastName" class="form-control" @bind-Value="_registerModel.LastName" />
+                            <ValidationMessage For="() => _registerModel.LastName" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="regEmail" class="form-label">Email</label>
+                            <InputText id="regEmail" class="form-control" @bind-Value="_registerModel.Email" />
+                            <ValidationMessage For="() => _registerModel.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="regPassword" class="form-label">Password</label>
+                            <InputText id="regPassword" type="password" class="form-control" @bind-Value="_registerModel.Password" />
+                            <ValidationMessage For="() => _registerModel.Password" />
+                        </div>
+                        <button type="submit" class="btn btn-success w-100" disabled="@_isLoading">
+                            @if (_isLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Register
+                        </button>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginFormModel _loginModel = new();
+    private RegisterFormModel _registerModel = new();
+    private bool _isLoginTab = true;
+    private bool _isLoading;
+    private string? _errorMessage;
+
+    private void SwitchTab(bool isLogin)
+    {
+        _isLoginTab = isLogin;
+        _errorMessage = null;
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            await AuthHttpService.LoginAsync(new PedalAcrossCanada.Shared.DTOs.Auth.LoginRequest
+            {
+                Email = _loginModel.Email,
+                Password = _loginModel.Password
+            });
+            NavigateToReturnUrl();
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Invalid email or password.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            await AuthHttpService.RegisterAsync(new PedalAcrossCanada.Shared.DTOs.Auth.RegisterRequest
+            {
+                Email = _registerModel.Email,
+                Password = _registerModel.Password,
+                FirstName = _registerModel.FirstName,
+                LastName = _registerModel.LastName
+            });
+            NavigateToReturnUrl();
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Registration failed. Please check your details and try again.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void NavigateToReturnUrl()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var returnUrl = "/";
+
+        if (!string.IsNullOrEmpty(uri.Query))
+        {
+            var queryParams = uri.Query.TrimStart('?').Split('&');
+            foreach (var param in queryParams)
+            {
+                var parts = param.Split('=', 2);
+                if (parts.Length == 2
+                    && parts[0].Equals("returnUrl", StringComparison.OrdinalIgnoreCase))
+                {
+                    returnUrl = Uri.UnescapeDataString(parts[1]);
+                    break;
+                }
+            }
+        }
+
+        Navigation.NavigateTo(returnUrl);
+    }
+
+    private sealed class LoginFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private sealed class RegisterFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string LastName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MinLength(6)]
+        public string Password { get; set; } = string.Empty;
+    }
+}

@@ -7,7 +7,7 @@ public class Badge
     public string? Description { get; set; }
     public decimal? ThresholdKm { get; set; }
     public bool IsDefault { get; set; }
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; }
 
     public ICollection<BadgeAward> BadgeAwards { get; set; } = [];
