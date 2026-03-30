@@ -1,0 +1,336 @@
+@page "/admin/events/{EventId:guid}/milestones"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject MilestoneHttpService MilestoneService
+@inject EventHttpService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Milestones - Pedal Across Canada</PageTitle>
+
+<Toast @ref="_toast" />
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Milestones</h3>
+    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateBack">
+        ← Back to Events
+    </button>
+</div>
+
+@if (_event is not null)
+{
+    <EventStatusBanner Event="_event" />
+}
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading milestones..." />
+}
+else
+{
+    @if (_event?.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Draft)
+    {
+        <div class="mb-3">
+            <button class="btn btn-primary" @onclick="ShowCreateForm">
+                <i class="bi bi-plus-circle"></i> Add Milestone
+            </button>
+        </div>
+    }
+
+    @if (_milestones is null || _milestones.Count == 0)
+    {
+        <div class="alert alert-info">No milestones defined for this event.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Stop Name</th>
+                        <th>Cumulative km</th>
+                        <th>Description</th>
+                        <th>Reward</th>
+                        <th>Achieved</th>
+                        <th>Announcement</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _milestones)
+                    {
+                        <tr class="@(m.AchievedAt.HasValue ? "table-success" : "")">
+                            <td>@m.OrderIndex</td>
+                            <td>@m.StopName</td>
+                            <td>@m.CumulativeDistanceKm.ToString("N2")</td>
+                            <td class="text-truncate" style="max-width: 200px;">@m.Description</td>
+                            <td class="text-truncate" style="max-width: 150px;">@m.RewardText</td>
+                            <td>
+                                @if (m.AchievedAt.HasValue)
+                                {
+                                    <span class="badge bg-success">@m.AchievedAt.Value.ToString("MMM d, yyyy")</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Not yet</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @GetAnnouncementBadge(m.AnnouncementStatus)">
+                                    @m.AnnouncementStatus
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary"
+                                            @onclick="() => ShowEditForm(m)">Edit</button>
+                                    @if (_event?.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Draft)
+                                    {
+                                        <button class="btn btn-outline-danger"
+                                                @onclick="() => DeleteMilestoneAsync(m.Id)">Delete</button>
+                                    }
+                                    @if (m.AchievedAt.HasValue
+                                         && m.AnnouncementStatus != PedalAcrossCanada.Shared.Enums.AnnouncementStatus.Announced)
+                                    {
+                                        <button class="btn btn-outline-success"
+                                                @onclick="() => AnnounceMilestoneAsync(m.Id)">Announce</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_showForm)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_isEditing ? "Edit Milestone" : "Add Milestone")</h5>
+                        <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                    </div>
+                    <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
+                        <DataAnnotationsValidator />
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Stop Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.StopName"
+                                           disabled="@(_isEditing && _event?.Status != PedalAcrossCanada.Shared.Enums.EventStatus.Draft)" />
+                                <ValidationMessage For="() => _formModel.StopName" />
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Order Index</label>
+                                    <InputNumber class="form-control" @bind-Value="_formModel.OrderIndex"
+                                                 disabled="@(_isEditing && _event?.Status != PedalAcrossCanada.Shared.Enums.EventStatus.Draft)" />
+                                    <ValidationMessage For="() => _formModel.OrderIndex" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Cumulative Distance (km)</label>
+                                    <InputNumber class="form-control" @bind-Value="_formModel.CumulativeDistanceKm"
+                                                 disabled="@(_isEditing && _event?.Status != PedalAcrossCanada.Shared.Enums.EventStatus.Draft)" />
+                                    <ValidationMessage For="() => _formModel.CumulativeDistanceKm" />
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <InputTextArea class="form-control" @bind-Value="_formModel.Description" rows="2" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Reward Text</label>
+                                <InputText class="form-control" @bind-Value="_formModel.RewardText" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                                @if (_isSaving)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                @(_isEditing ? "Save Changes" : "Add")
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid EventId { get; set; }
+
+    private PedalAcrossCanada.Shared.DTOs.Events.EventDto? _event;
+    private List<PedalAcrossCanada.Shared.DTOs.Milestones.MilestoneDto> _milestones = [];
+    private bool _isLoading = true;
+    private bool _showForm;
+    private bool _isEditing;
+    private bool _isSaving;
+    private Guid? _editingMilestoneId;
+    private MilestoneFormModel _formModel = new();
+    private Toast _toast = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _event = await EventService.GetByIdAsync(EventId);
+            var milestones = await MilestoneService.GetAllAsync(EventId);
+            _milestones = milestones?.ToList() ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        var nextOrder = _milestones.Count > 0 ? _milestones.Max(m => m.OrderIndex) + 1 : 1;
+        _formModel = new MilestoneFormModel { OrderIndex = nextOrder };
+        _isEditing = false;
+        _editingMilestoneId = null;
+        _showForm = true;
+    }
+
+    private void ShowEditForm(PedalAcrossCanada.Shared.DTOs.Milestones.MilestoneDto m)
+    {
+        _formModel = new MilestoneFormModel
+        {
+            StopName = m.StopName,
+            OrderIndex = m.OrderIndex,
+            CumulativeDistanceKm = m.CumulativeDistanceKm,
+            Description = m.Description,
+            RewardText = m.RewardText
+        };
+        _isEditing = true;
+        _editingMilestoneId = m.Id;
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            if (_isEditing && _editingMilestoneId.HasValue)
+            {
+                var request = new PedalAcrossCanada.Shared.DTOs.Milestones.UpdateMilestoneRequest
+                {
+                    StopName = _formModel.StopName,
+                    OrderIndex = _formModel.OrderIndex,
+                    CumulativeDistanceKm = _formModel.CumulativeDistanceKm,
+                    Description = _formModel.Description,
+                    RewardText = _formModel.RewardText
+                };
+                await MilestoneService.UpdateAsync(EventId, _editingMilestoneId.Value, request);
+                _toast.ShowSuccess("Milestone updated.");
+            }
+            else
+            {
+                var request = new PedalAcrossCanada.Shared.DTOs.Milestones.CreateMilestoneRequest
+                {
+                    StopName = _formModel.StopName,
+                    OrderIndex = _formModel.OrderIndex,
+                    CumulativeDistanceKm = _formModel.CumulativeDistanceKm,
+                    Description = _formModel.Description,
+                    RewardText = _formModel.RewardText
+                };
+                await MilestoneService.CreateAsync(EventId, request);
+                _toast.ShowSuccess("Milestone added.");
+            }
+
+            CloseForm();
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Operation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteMilestoneAsync(Guid milestoneId)
+    {
+        try
+        {
+            await MilestoneService.DeleteAsync(EventId, milestoneId);
+            _toast.ShowSuccess("Milestone deleted.");
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Delete failed: {ex.Message}");
+        }
+    }
+
+    private async Task AnnounceMilestoneAsync(Guid milestoneId)
+    {
+        try
+        {
+            await MilestoneService.AnnounceAsync(EventId, milestoneId);
+            _toast.ShowSuccess("Milestone announced!");
+            await LoadDataAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Announce failed: {ex.Message}");
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/admin/events");
+    }
+
+    private static string GetAnnouncementBadge(PedalAcrossCanada.Shared.Enums.AnnouncementStatus status) => status switch
+    {
+        PedalAcrossCanada.Shared.Enums.AnnouncementStatus.Pending               => "bg-secondary",
+        PedalAcrossCanada.Shared.Enums.AnnouncementStatus.ReadyForAnnouncement  => "bg-warning text-dark",
+        PedalAcrossCanada.Shared.Enums.AnnouncementStatus.Announced             => "bg-success",
+        _                                                                        => "bg-info"
+    };
+
+    private class MilestoneFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string StopName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(0, int.MaxValue)]
+        public int OrderIndex { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(0.01, 100000)]
+        public decimal CumulativeDistanceKm { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(1000)]
+        public string? Description { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string? RewardText { get; set; }
+    }
+}

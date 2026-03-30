@@ -1,0 +1,410 @@
+@page "/admin/events"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject EventHttpService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Event Management - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Event Management</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading events..." />
+}
+else
+{
+    <div class="mb-3">
+        <button class="btn btn-primary" @onclick="ShowCreateForm">
+            <i class="bi bi-plus-circle"></i> Create Event
+        </button>
+    </div>
+
+    @if (_events is null || _events.Count == 0)
+    {
+        <div class="alert alert-info">No events have been created yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Route (km)</th>
+                        <th>Milestones</th>
+                        <th>Participants</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ev in _events)
+                    {
+                        <tr>
+                            <td>@ev.Name</td>
+                            <td><span class="badge @GetStatusBadge(ev.Status)">@ev.Status</span></td>
+                            <td>@ev.StartDate.ToString("MMM d, yyyy")</td>
+                            <td>@ev.EndDate.ToString("MMM d, yyyy")</td>
+                            <td>@ev.RouteDistanceKm.ToString("N2")</td>
+                            <td>@ev.MilestoneCount</td>
+                            <td>@ev.ParticipantCount</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" @onclick="() => ShowEditForm(ev)">Edit</button>
+                                    <button class="btn btn-outline-info"
+                                            @onclick="() => NavigateToMilestones(ev.Id)">Milestones</button>
+                                    @if (ev.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Draft)
+                                    {
+                                        <button class="btn btn-outline-success"
+                                                @onclick="() => ActivateEventAsync(ev.Id)">Activate</button>
+                                    }
+                                    @if (ev.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Active)
+                                    {
+                                        <button class="btn btn-outline-warning"
+                                                @onclick="() => CloseEventAsync(ev.Id)">Close</button>
+                                        <button class="btn btn-outline-secondary"
+                                                @onclick="() => RevertToDraftAsync(ev.Id)">Revert to Draft</button>
+                                    }
+                                    @if (ev.Status == PedalAcrossCanada.Shared.Enums.EventStatus.Closed)
+                                    {
+                                        <button class="btn btn-outline-dark"
+                                                @onclick="() => ArchiveEventAsync(ev.Id)">Archive</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_showForm)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(_isEditing ? "Edit Event" : "Create Event")</h5>
+                        <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                    </div>
+                    <EditForm Model="_formModel" OnValidSubmit="HandleSubmitAsync">
+                        <DataAnnotationsValidator />
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Name</label>
+                                <InputText class="form-control" @bind-Value="_formModel.Name" />
+                                <ValidationMessage For="() => _formModel.Name" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Description</label>
+                                <InputTextArea class="form-control" @bind-Value="_formModel.Description" rows="3" />
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Start Date</label>
+                                    <InputDate class="form-control" @bind-Value="_formModel.StartDate" />
+                                    <ValidationMessage For="() => _formModel.StartDate" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">End Date</label>
+                                    <InputDate class="form-control" @bind-Value="_formModel.EndDate" />
+                                    <ValidationMessage For="() => _formModel.EndDate" />
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Route Distance (km)</label>
+                                    <InputNumber class="form-control" @bind-Value="_formModel.RouteDistanceKm" />
+                                    <ValidationMessage For="() => _formModel.RouteDistanceKm" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Max Single Ride (km)</label>
+                                    <InputNumber class="form-control" @bind-Value="_formModel.MaxSingleRideKm" />
+                                    <ValidationMessage For="() => _formModel.MaxSingleRideKm" />
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Manual Entry Mode</label>
+                                <InputSelect class="form-select" @bind-Value="_formModel.ManualEntryMode">
+                                    @foreach (var mode in Enum.GetValues<PedalAcrossCanada.Shared.Enums.ManualEntryMode>())
+                                    {
+                                        <option value="@mode">@mode</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Banner Message</label>
+                                <InputText class="form-control" @bind-Value="_formModel.BannerMessage" />
+                            </div>
+                            <div class="form-check mb-2">
+                                <InputCheckbox class="form-check-input" @bind-Value="_formModel.StravaEnabled" />
+                                <label class="form-check-label">Enable Strava Sync</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <InputCheckbox class="form-check-input" @bind-Value="_formModel.LeaderboardPublic" />
+                                <label class="form-check-label">Public Leaderboard</label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <InputCheckbox class="form-check-input" @bind-Value="_formModel.ShowTeamAverage" />
+                                <label class="form-check-label">Show Team Average</label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseForm">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_isSaving">
+                                @if (_isSaving)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                @(_isEditing ? "Save Changes" : "Create")
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<PedalAcrossCanada.Shared.DTOs.Events.EventDto> _events = [];
+    private bool _isLoading = true;
+    private bool _showForm;
+    private bool _isEditing;
+    private bool _isSaving;
+    private Guid? _editingEventId;
+    private EventFormModel _formModel = new();
+    private Toast _toast = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEventsAsync();
+    }
+
+    private async Task LoadEventsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var result = await EventService.GetAllAsync(1, 100);
+            _events = result?.Data?.ToList() ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load events. Please try again.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowCreateForm()
+    {
+        _formModel = new EventFormModel
+        {
+            StartDate = DateTime.UtcNow.Date,
+            EndDate = DateTime.UtcNow.Date.AddMonths(3),
+            RouteDistanceKm = 3757m,
+            MaxSingleRideKm = 300m,
+            ManualEntryMode = PedalAcrossCanada.Shared.Enums.ManualEntryMode.AllowedWithApproval,
+            LeaderboardPublic = true,
+            ShowTeamAverage = true
+        };
+        _isEditing = false;
+        _editingEventId = null;
+        _showForm = true;
+    }
+
+    private void ShowEditForm(PedalAcrossCanada.Shared.DTOs.Events.EventDto ev)
+    {
+        _formModel = new EventFormModel
+        {
+            Name = ev.Name,
+            Description = ev.Description,
+            StartDate = ev.StartDate,
+            EndDate = ev.EndDate,
+            RouteDistanceKm = ev.RouteDistanceKm,
+            ManualEntryMode = ev.ManualEntryMode,
+            StravaEnabled = ev.StravaEnabled,
+            BannerMessage = ev.BannerMessage,
+            MaxSingleRideKm = ev.MaxSingleRideKm,
+            LeaderboardPublic = ev.LeaderboardPublic,
+            ShowTeamAverage = ev.ShowTeamAverage
+        };
+        _isEditing = true;
+        _editingEventId = ev.Id;
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            if (_isEditing && _editingEventId.HasValue)
+            {
+                var request = new PedalAcrossCanada.Shared.DTOs.Events.UpdateEventRequest
+                {
+                    Name = _formModel.Name,
+                    Description = _formModel.Description,
+                    StartDate = _formModel.StartDate,
+                    EndDate = _formModel.EndDate,
+                    RouteDistanceKm = _formModel.RouteDistanceKm,
+                    ManualEntryMode = _formModel.ManualEntryMode,
+                    StravaEnabled = _formModel.StravaEnabled,
+                    BannerMessage = _formModel.BannerMessage,
+                    MaxSingleRideKm = _formModel.MaxSingleRideKm,
+                    LeaderboardPublic = _formModel.LeaderboardPublic,
+                    ShowTeamAverage = _formModel.ShowTeamAverage
+                };
+                await EventService.UpdateAsync(_editingEventId.Value, request);
+                _toast.ShowSuccess("Event updated successfully.");
+            }
+            else
+            {
+                var request = new PedalAcrossCanada.Shared.DTOs.Events.CreateEventRequest
+                {
+                    Name = _formModel.Name,
+                    Description = _formModel.Description,
+                    StartDate = _formModel.StartDate,
+                    EndDate = _formModel.EndDate,
+                    RouteDistanceKm = _formModel.RouteDistanceKm,
+                    ManualEntryMode = _formModel.ManualEntryMode,
+                    StravaEnabled = _formModel.StravaEnabled,
+                    BannerMessage = _formModel.BannerMessage,
+                    MaxSingleRideKm = _formModel.MaxSingleRideKm,
+                    LeaderboardPublic = _formModel.LeaderboardPublic,
+                    ShowTeamAverage = _formModel.ShowTeamAverage
+                };
+                await EventService.CreateAsync(request);
+                _toast.ShowSuccess("Event created successfully.");
+            }
+
+            CloseForm();
+            await LoadEventsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Operation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task ActivateEventAsync(Guid eventId)
+    {
+        try
+        {
+            await EventService.ActivateAsync(eventId);
+            _toast.ShowSuccess("Event activated.");
+            await LoadEventsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Activation failed: {ex.Message}");
+        }
+    }
+
+    private async Task CloseEventAsync(Guid eventId)
+    {
+        try
+        {
+            await EventService.CloseAsync(eventId);
+            _toast.ShowSuccess("Event closed.");
+            await LoadEventsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Close failed: {ex.Message}");
+        }
+    }
+
+    private async Task ArchiveEventAsync(Guid eventId)
+    {
+        try
+        {
+            await EventService.ArchiveAsync(eventId);
+            _toast.ShowSuccess("Event archived.");
+            await LoadEventsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Archive failed: {ex.Message}");
+        }
+    }
+
+    private async Task RevertToDraftAsync(Guid eventId)
+    {
+        try
+        {
+            await EventService.RevertToDraftAsync(eventId);
+            _toast.ShowSuccess("Event reverted to draft.");
+            await LoadEventsAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Revert failed: {ex.Message}");
+        }
+    }
+
+    private void NavigateToMilestones(Guid eventId)
+    {
+        Navigation.NavigateTo($"/admin/events/{eventId}/milestones");
+    }
+
+    private static string GetStatusBadge(PedalAcrossCanada.Shared.Enums.EventStatus status) => status switch
+    {
+        PedalAcrossCanada.Shared.Enums.EventStatus.Draft    => "bg-secondary",
+        PedalAcrossCanada.Shared.Enums.EventStatus.Active   => "bg-success",
+        PedalAcrossCanada.Shared.Enums.EventStatus.Closed   => "bg-warning text-dark",
+        PedalAcrossCanada.Shared.Enums.EventStatus.Archived => "bg-dark",
+        _                                                    => "bg-info"
+    };
+
+    private class EventFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(2000)]
+        public string? Description { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public DateTime StartDate { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public DateTime EndDate { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(0.01, 100000)]
+        public decimal RouteDistanceKm { get; set; }
+
+        public PedalAcrossCanada.Shared.Enums.ManualEntryMode ManualEntryMode { get; set; }
+
+        public bool StravaEnabled { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(1000)]
+        public string? BannerMessage { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Range(0.01, 10000)]
+        public decimal MaxSingleRideKm { get; set; } = 300m;
+
+        public bool LeaderboardPublic { get; set; } = true;
+
+        public bool ShowTeamAverage { get; set; } = true;
+    }
+}

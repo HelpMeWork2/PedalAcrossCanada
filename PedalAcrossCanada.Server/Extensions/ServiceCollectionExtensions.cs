@@ -73,8 +73,9 @@ public static class ServiceCollectionExtensions
         // Application services
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
-
-        // Phase 4+: domain services registered here
+        services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IEventService, EventService>();
+        services.AddScoped<IMilestoneService, MilestoneService>();
 
         return services;
     }

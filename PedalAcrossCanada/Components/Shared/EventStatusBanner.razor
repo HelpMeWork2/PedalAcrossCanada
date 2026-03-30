@@ -1,0 +1,41 @@
+@using PedalAcrossCanada.Shared.DTOs.Events
+@using PedalAcrossCanada.Shared.Enums
+
+@if (Event is not null)
+{
+    <div class="alert @AlertCss d-flex justify-content-between align-items-center" role="alert">
+        <div>
+            <strong>@Event.Name</strong>
+            <span class="badge @BadgeCss ms-2">@Event.Status</span>
+            @if (!string.IsNullOrWhiteSpace(Event.BannerMessage))
+            {
+                <span class="ms-2">— @Event.BannerMessage</span>
+            }
+        </div>
+        <div class="text-end small">
+            @Event.StartDate.ToString("MMM d, yyyy") – @Event.EndDate.ToString("MMM d, yyyy")
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public EventDto? Event { get; set; }
+
+    private string AlertCss => Event?.Status switch
+    {
+        EventStatus.Draft    => "alert-secondary",
+        EventStatus.Active   => "alert-success",
+        EventStatus.Closed   => "alert-warning",
+        EventStatus.Archived => "alert-dark",
+        _                    => "alert-info"
+    };
+
+    private string BadgeCss => Event?.Status switch
+    {
+        EventStatus.Draft    => "bg-secondary",
+        EventStatus.Active   => "bg-success",
+        EventStatus.Closed   => "bg-warning text-dark",
+        EventStatus.Archived => "bg-dark",
+        _                    => "bg-info"
+    };
+}

@@ -24,5 +24,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AuthHttpService>();
 builder.Services.AddScoped<ApiClient>();
+builder.Services.AddScoped<EventHttpService>();
+builder.Services.AddScoped<MilestoneHttpService>();
 
 await builder.Build().RunAsync();
