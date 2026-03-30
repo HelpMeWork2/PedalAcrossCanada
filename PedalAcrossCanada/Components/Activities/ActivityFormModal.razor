@@ -1,0 +1,95 @@
+@using static PedalAcrossCanada.Pages.MyActivities
+
+<div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(IsEditing ? "Edit Activity" : "Log a Ride")</h5>
+                <button type="button" class="btn-close" @onclick="OnCancel"></button>
+            </div>
+            <EditForm Model="Model" OnValidSubmit="OnSubmit">
+                <DataAnnotationsValidator />
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Activity Date</label>
+                        <InputDate class="form-control" @bind-Value="Model.ActivityDate" />
+                        <ValidationMessage For="() => Model.ActivityDate" />
+                        @if (ActiveEvent is not null)
+                        {
+                            <small class="text-muted">
+                                Must be between @ActiveEvent.StartDate.ToString("MMM d, yyyy")
+                                and @ActiveEvent.EndDate.ToString("MMM d, yyyy")
+                            </small>
+                        }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Distance (km)</label>
+                        <InputNumber class="form-control" @bind-Value="Model.DistanceKm" />
+                        <ValidationMessage For="() => Model.DistanceKm" />
+                        @if (ActiveEvent is not null)
+                        {
+                            <small class="text-muted">
+                                Max per ride: @ActiveEvent.MaxSingleRideKm.ToString("N2") km
+                            </small>
+                        }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ride Type</label>
+                        <InputSelect class="form-select" @bind-Value="Model.RideType">
+                            @foreach (var rideType in Enum.GetValues<RideType>())
+                            {
+                                <option value="@rideType">@rideType</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes (optional)</label>
+                        <InputTextArea class="form-control" @bind-Value="Model.Notes" rows="3" />
+                        <ValidationMessage For="() => Model.Notes" />
+                    </div>
+
+                    @if (ActiveEvent?.ManualEntryMode == ManualEntryMode.AllowedWithApproval && !IsEditing)
+                    {
+                        <div class="alert alert-info mb-0">
+                            <small>
+                                <i class="bi bi-info-circle"></i>
+                                This event requires admin approval. Your ride will be marked as
+                                <strong>Pending</strong> until approved.
+                            </small>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" disabled="@IsSaving">
+                        @if (IsSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        @(IsEditing ? "Save Changes" : "Log Ride")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public bool IsEditing { get; set; }
+
+    [Parameter, EditorRequired]
+    public ActivityFormModel Model { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public EventDto? ActiveEvent { get; set; }
+
+    [Parameter, EditorRequired]
+    public bool IsSaving { get; set; }
+
+    [Parameter, EditorRequired]
+    public EventCallback OnSubmit { get; set; }
+
+    [Parameter, EditorRequired]
+    public EventCallback OnCancel { get; set; }
+}

@@ -1,0 +1,336 @@
+@page "/activities"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject ActivityHttpService ActivityService
+@inject EventHttpService EventService
+@inject ParticipantHttpService ParticipantService
+@inject NavigationManager Navigation
+
+<PageTitle>My Activities - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">My Activities</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading activities..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found. Please check back later.</div>
+}
+else if (_participant is null)
+{
+    <div class="alert alert-info">
+        You are not registered for the current event.
+        <a href="join" class="alert-link">Join now</a>.
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <span class="text-muted">
+                Event: <strong>@_activeEvent.Name</strong>
+                (@_activeEvent.StartDate.ToString("MMM d") – @_activeEvent.EndDate.ToString("MMM d, yyyy"))
+            </span>
+        </div>
+        @if (_activeEvent.Status == EventStatus.Active &&
+             _activeEvent.ManualEntryMode != ManualEntryMode.Disabled)
+        {
+            <button class="btn btn-primary" @onclick="ShowCreateForm">
+                <i class="bi bi-plus-circle"></i> Log a Ride
+            </button>
+        }
+    </div>
+
+    @if (_activities is null || _activities.Count == 0)
+    {
+        <div class="alert alert-info">You haven't logged any rides yet. Get started!</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Distance (km)</th>
+                        <th>Type</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var activity in _activities)
+                    {
+                        <tr>
+                            <td>@activity.ActivityDate.ToString("MMM d, yyyy")</td>
+                            <td>@activity.DistanceKm.ToString("N2")</td>
+                            <td>@activity.RideType</td>
+                            <td>
+                                <span class="badge @(activity.Source == ActivitySource.Manual ? "bg-secondary" : "bg-info")">
+                                    @activity.Source
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge @GetStatusBadge(activity.Status)">
+                                    @activity.Status
+                                </span>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(activity.Notes))
+                                {
+                                    <span title="@activity.Notes">
+                                        @(activity.Notes.Length > 30
+                                            ? activity.Notes[..30] + "..."
+                                            : activity.Notes)
+                                    </span>
+                                }
+                                @if (activity.Status == ActivityStatus.Rejected &&
+                                     !string.IsNullOrEmpty(activity.RejectionReason))
+                                {
+                                    <br />
+                                    <small class="text-danger">
+                                        Rejected: @activity.RejectionReason
+                                    </small>
+                                }
+                            </td>
+                            <td>
+                                @if (CanEdit(activity))
+                                {
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary"
+                                                @onclick="() => ShowEditForm(activity)">Edit</button>
+                                        <button class="btn btn-outline-danger"
+                                                @onclick="() => DeleteActivityAsync(activity)">Delete</button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (_totalPages > 1)
+        {
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage - 1)">Previous</button>
+                    </li>
+                    @for (var i = 1; i <= _totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(pageNum == _currentPage ? "active" : "")">
+                            <button class="page-link" @onclick="() => LoadPageAsync(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+
+    @if (_showForm)
+    {
+        <ActivityFormModal
+            IsEditing="_isEditing"
+            Model="_formModel"
+            ActiveEvent="_activeEvent"
+            IsSaving="_isSaving"
+            OnSubmit="HandleSubmitAsync"
+            OnCancel="CloseForm" />
+    }
+}
+
+@code {
+    private List<ActivityDto> _activities = [];
+    private EventDto? _activeEvent;
+    private ParticipantDto? _participant;
+    private bool _isLoading = true;
+    private bool _showForm;
+    private bool _isEditing;
+    private bool _isSaving;
+    private Guid? _editingActivityId;
+    private ActivityFormModel _formModel = new();
+    private Toast _toast = null!;
+    private int _currentPage = 1;
+    private int _totalPages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                try
+                {
+                    _participant = await ParticipantService.GetMeAsync(_activeEvent.Id);
+                }
+                catch (HttpRequestException)
+                {
+                    _participant = null;
+                }
+
+                if (_participant is not null)
+                {
+                    await LoadPageAsync(1);
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _activeEvent = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        if (_activeEvent is null) return;
+
+        _currentPage = page;
+        var result = await ActivityService.GetMyActivitiesAsync(_activeEvent.Id, page);
+        _activities = result?.Data?.ToList() ?? [];
+        _totalPages = result?.TotalPages ?? 0;
+    }
+
+    private void ShowCreateForm()
+    {
+        _isEditing = false;
+        _editingActivityId = null;
+        _formModel = new ActivityFormModel
+        {
+            ActivityDate = DateTime.UtcNow.Date
+        };
+        _showForm = true;
+    }
+
+    private void ShowEditForm(ActivityDto activity)
+    {
+        _isEditing = true;
+        _editingActivityId = activity.Id;
+        _formModel = new ActivityFormModel
+        {
+            ActivityDate = activity.ActivityDate,
+            DistanceKm = activity.DistanceKm,
+            RideType = activity.RideType,
+            Notes = activity.Notes
+        };
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+        _isSaving = false;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (_activeEvent is null) return;
+
+        _isSaving = true;
+        try
+        {
+            if (_isEditing && _editingActivityId.HasValue)
+            {
+                var request = new UpdateActivityRequest
+                {
+                    ActivityDate = _formModel.ActivityDate,
+                    DistanceKm = _formModel.DistanceKm,
+                    RideType = _formModel.RideType,
+                    Notes = _formModel.Notes
+                };
+                await ActivityService.UpdateAsync(_activeEvent.Id, _editingActivityId.Value, request);
+                _toast.ShowSuccess("Activity updated successfully.");
+            }
+            else
+            {
+                var request = new CreateActivityRequest
+                {
+                    ActivityDate = _formModel.ActivityDate,
+                    DistanceKm = _formModel.DistanceKm,
+                    RideType = _formModel.RideType,
+                    Notes = _formModel.Notes
+                };
+                var result = await ActivityService.CreateAsync(_activeEvent.Id, request);
+
+                if (result?.DuplicateWarning == true)
+                {
+                    _toast.ShowSuccess("Activity created. Note: A possible duplicate was detected.");
+                }
+                else
+                {
+                    _toast.ShowSuccess("Activity logged successfully!");
+                }
+            }
+
+            CloseForm();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteActivityAsync(ActivityDto activity)
+    {
+        if (_activeEvent is null) return;
+
+        try
+        {
+            await ActivityService.DeleteAsync(_activeEvent.Id, activity.Id);
+            _toast.ShowSuccess("Activity deleted.");
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+        }
+    }
+
+    private bool CanEdit(ActivityDto activity) =>
+        activity.Source == ActivitySource.Manual &&
+        !activity.LockedByAdmin &&
+        _activeEvent?.Status == EventStatus.Active;
+
+    private static string GetStatusBadge(ActivityStatus status) => status switch
+    {
+        ActivityStatus.Approved => "bg-success",
+        ActivityStatus.Pending => "bg-warning text-dark",
+        ActivityStatus.Rejected => "bg-danger",
+        ActivityStatus.Invalid => "bg-dark",
+        _ => "bg-secondary"
+    };
+
+    public class ActivityFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public DateTime ActivityDate { get; set; } = DateTime.UtcNow.Date;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.Range(0.01, 100000)]
+        public decimal DistanceKm { get; set; }
+
+        public RideType RideType { get; set; } = RideType.Leisure;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string? Notes { get; set; }
+    }
+}

@@ -28,5 +28,6 @@ builder.Services.AddScoped<EventHttpService>();
 builder.Services.AddScoped<MilestoneHttpService>();
 builder.Services.AddScoped<TeamHttpService>();
 builder.Services.AddScoped<ParticipantHttpService>();
+builder.Services.AddScoped<ActivityHttpService>();
 
 await builder.Build().RunAsync();

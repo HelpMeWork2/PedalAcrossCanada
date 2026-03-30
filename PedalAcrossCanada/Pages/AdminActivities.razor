@@ -1,0 +1,459 @@
+@page "/admin/activities"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject ActivityHttpService ActivityService
+@inject EventHttpService EventService
+@inject NavigationManager Navigation
+
+<PageTitle>Activities Review - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Activities Review</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading activities..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found.</div>
+}
+else
+{
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(_activeTab == Tab.Pending ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(Tab.Pending)">
+                Pending Approval
+                @if (_pendingCount > 0)
+                {
+                    <span class="badge bg-warning text-dark ms-1">@_pendingCount</span>
+                }
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_activeTab == Tab.All ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(Tab.All)">
+                All Activities
+            </button>
+        </li>
+    </ul>
+
+    @if (_activeTab == Tab.All)
+    {
+        <div class="row mb-3 g-2">
+            <div class="col-auto">
+                <select class="form-select form-select-sm" @onchange="OnStatusFilterChanged">
+                    <option value="">All Statuses</option>
+                    @foreach (var s in Enum.GetValues<ActivityStatus>())
+                    {
+                        <option value="@s" selected="@(_filterStatus?.ToString() == s.ToString())">@s</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" @onchange="OnSourceFilterChanged">
+                    <option value="">All Sources</option>
+                    @foreach (var src in Enum.GetValues<ActivitySource>())
+                    {
+                        <option value="@src" selected="@(_filterSource?.ToString() == src.ToString())">@src</option>
+                    }
+                </select>
+            </div>
+        </div>
+    }
+
+    @if (_activities.Count == 0)
+    {
+        <div class="alert alert-info">
+            @(_activeTab == Tab.Pending
+                ? "No pending activities to review."
+                : "No activities found matching the selected filters.")
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Participant</th>
+                        <th>Distance (km)</th>
+                        <th>Type</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var activity in _activities)
+                    {
+                        <tr>
+                            <td>@activity.ActivityDate.ToString("MMM d, yyyy")</td>
+                            <td>@activity.ParticipantDisplayName</td>
+                            <td>@activity.DistanceKm.ToString("N2")</td>
+                            <td>@activity.RideType</td>
+                            <td>
+                                <span class="badge @(activity.Source == ActivitySource.Manual ? "bg-secondary" : "bg-info")">
+                                    @activity.Source
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge @GetStatusBadge(activity.Status)">
+                                    @activity.Status
+                                </span>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(activity.Notes))
+                                {
+                                    <span title="@activity.Notes">
+                                        @(activity.Notes.Length > 25
+                                            ? activity.Notes[..25] + "..."
+                                            : activity.Notes)
+                                    </span>
+                                }
+                                @if (activity.IsDuplicateFlagged)
+                                {
+                                    <br />
+                                    <small class="text-warning">⚠ Duplicate flagged</small>
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    @if (activity.Status == ActivityStatus.Pending)
+                                    {
+                                        <button class="btn btn-outline-success"
+                                                @onclick="() => ApproveAsync(activity)">Approve</button>
+                                        <button class="btn btn-outline-danger"
+                                                @onclick="() => ShowRejectModal(activity)">Reject</button>
+                                    }
+                                    @if (activity.Status == ActivityStatus.Approved ||
+                                         activity.Status == ActivityStatus.Pending)
+                                    {
+                                        <button class="btn btn-outline-dark"
+                                                @onclick="() => ShowInvalidateModal(activity)">Invalidate</button>
+                                    }
+                                    @if (!activity.LockedByAdmin && activity.Source == ActivitySource.Manual)
+                                    {
+                                        <button class="btn btn-outline-secondary"
+                                                @onclick="() => LockAsync(activity)">Lock</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (_totalPages > 1)
+        {
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage - 1)">Previous</button>
+                    </li>
+                    @for (var i = 1; i <= _totalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(pageNum == _currentPage ? "active" : "")">
+                            <button class="page-link" @onclick="() => LoadPageAsync(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => LoadPageAsync(_currentPage + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    }
+
+    @* Reject Modal *@
+    @if (_showRejectModal && _targetActivity is not null)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Reject Activity</h5>
+                        <button type="button" class="btn-close" @onclick="CloseModals"></button>
+                    </div>
+                    <EditForm Model="_rejectModel" OnValidSubmit="HandleRejectAsync">
+                        <DataAnnotationsValidator />
+                        <div class="modal-body">
+                            <p>
+                                Rejecting activity by <strong>@_targetActivity.ParticipantDisplayName</strong>
+                                on @_targetActivity.ActivityDate.ToString("MMM d, yyyy")
+                                (@_targetActivity.DistanceKm.ToString("N2") km).
+                            </p>
+                            <div class="mb-3">
+                                <label class="form-label">Rejection Reason</label>
+                                <InputTextArea class="form-control" @bind-Value="_rejectModel.Reason" rows="3" />
+                                <ValidationMessage For="() => _rejectModel.Reason" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                            <button type="submit" class="btn btn-danger" disabled="@_isProcessing">
+                                @if (_isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                Reject
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Invalidate Modal *@
+    @if (_showInvalidateModal && _targetActivity is not null)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Invalidate Activity</h5>
+                        <button type="button" class="btn-close" @onclick="CloseModals"></button>
+                    </div>
+                    <EditForm Model="_invalidateModel" OnValidSubmit="HandleInvalidateAsync">
+                        <DataAnnotationsValidator />
+                        <div class="modal-body">
+                            <p>
+                                Invalidating activity by <strong>@_targetActivity.ParticipantDisplayName</strong>
+                                on @_targetActivity.ActivityDate.ToString("MMM d, yyyy")
+                                (@_targetActivity.DistanceKm.ToString("N2") km).
+                                This will remove it from all totals.
+                            </p>
+                            <div class="mb-3">
+                                <label class="form-label">Reason</label>
+                                <InputTextArea class="form-control" @bind-Value="_invalidateModel.Reason" rows="3" />
+                                <ValidationMessage For="() => _invalidateModel.Reason" />
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                            <button type="submit" class="btn btn-dark" disabled="@_isProcessing">
+                                @if (_isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                Invalidate
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private enum Tab { Pending, All }
+
+    private List<ActivityDto> _activities = [];
+    private EventDto? _activeEvent;
+    private bool _isLoading = true;
+    private bool _isProcessing;
+    private Tab _activeTab = Tab.Pending;
+    private int _currentPage = 1;
+    private int _totalPages;
+    private int _pendingCount;
+    private ActivityStatus? _filterStatus;
+    private ActivitySource? _filterSource;
+    private Toast _toast = null!;
+
+    private bool _showRejectModal;
+    private bool _showInvalidateModal;
+    private ActivityDto? _targetActivity;
+    private RejectFormModel _rejectModel = new();
+    private InvalidateFormModel _invalidateModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                await LoadPendingCountAsync();
+                await LoadPageAsync(1);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _activeEvent = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SwitchTabAsync(Tab tab)
+    {
+        _activeTab = tab;
+        _currentPage = 1;
+        _filterStatus = null;
+        _filterSource = null;
+        await LoadPageAsync(1);
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        if (_activeEvent is null) return;
+
+        _currentPage = page;
+
+        var status = _activeTab == Tab.Pending ? ActivityStatus.Pending : _filterStatus;
+        var result = await ActivityService.GetAllAsync(
+            _activeEvent.Id, page, 25, status, _filterSource);
+
+        _activities = result?.Data?.ToList() ?? [];
+        _totalPages = result?.TotalPages ?? 0;
+    }
+
+    private async Task LoadPendingCountAsync()
+    {
+        if (_activeEvent is null) return;
+
+        var result = await ActivityService.GetAllAsync(
+            _activeEvent.Id, 1, 1, ActivityStatus.Pending);
+        _pendingCount = result?.TotalCount ?? 0;
+    }
+
+    private async Task ApproveAsync(ActivityDto activity)
+    {
+        if (_activeEvent is null) return;
+
+        try
+        {
+            await ActivityService.ApproveAsync(_activeEvent.Id, activity.Id);
+            _toast.ShowSuccess($"Activity by {activity.ParticipantDisplayName} approved.");
+            await LoadPendingCountAsync();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+        }
+    }
+
+    private void ShowRejectModal(ActivityDto activity)
+    {
+        _targetActivity = activity;
+        _rejectModel = new RejectFormModel();
+        _showRejectModal = true;
+    }
+
+    private void ShowInvalidateModal(ActivityDto activity)
+    {
+        _targetActivity = activity;
+        _invalidateModel = new InvalidateFormModel();
+        _showInvalidateModal = true;
+    }
+
+    private void CloseModals()
+    {
+        _showRejectModal = false;
+        _showInvalidateModal = false;
+        _targetActivity = null;
+        _isProcessing = false;
+    }
+
+    private async Task HandleRejectAsync()
+    {
+        if (_activeEvent is null || _targetActivity is null) return;
+
+        _isProcessing = true;
+        try
+        {
+            var request = new RejectActivityRequest { Reason = _rejectModel.Reason };
+            await ActivityService.RejectAsync(_activeEvent.Id, _targetActivity.Id, request);
+            _toast.ShowSuccess($"Activity by {_targetActivity.ParticipantDisplayName} rejected.");
+            CloseModals();
+            await LoadPendingCountAsync();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+            _isProcessing = false;
+        }
+    }
+
+    private async Task HandleInvalidateAsync()
+    {
+        if (_activeEvent is null || _targetActivity is null) return;
+
+        _isProcessing = true;
+        try
+        {
+            var request = new InvalidateActivityRequest { Reason = _invalidateModel.Reason };
+            await ActivityService.InvalidateAsync(_activeEvent.Id, _targetActivity.Id, request);
+            _toast.ShowSuccess($"Activity by {_targetActivity.ParticipantDisplayName} invalidated.");
+            CloseModals();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+            _isProcessing = false;
+        }
+    }
+
+    private async Task LockAsync(ActivityDto activity)
+    {
+        if (_activeEvent is null) return;
+
+        try
+        {
+            await ActivityService.LockAsync(_activeEvent.Id, activity.Id);
+            _toast.ShowSuccess($"Activity by {activity.ParticipantDisplayName} locked.");
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+        }
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        _filterStatus = Enum.TryParse<ActivityStatus>(e.Value?.ToString(), out var s) ? s : null;
+        await LoadPageAsync(1);
+    }
+
+    private async Task OnSourceFilterChanged(ChangeEventArgs e)
+    {
+        _filterSource = Enum.TryParse<ActivitySource>(e.Value?.ToString(), out var s) ? s : null;
+        await LoadPageAsync(1);
+    }
+
+    private static string GetStatusBadge(ActivityStatus status) => status switch
+    {
+        ActivityStatus.Approved => "bg-success",
+        ActivityStatus.Pending => "bg-warning text-dark",
+        ActivityStatus.Rejected => "bg-danger",
+        ActivityStatus.Invalid => "bg-dark",
+        _ => "bg-secondary"
+    };
+
+    public class RejectFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class InvalidateFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string Reason { get; set; } = string.Empty;
+    }
+}

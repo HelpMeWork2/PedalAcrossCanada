@@ -87,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMilestoneService, MilestoneService>();
         services.AddScoped<ITeamService, TeamService>();
         services.AddScoped<IParticipantService, ParticipantService>();
+        services.AddScoped<IActivityService, ActivityService>();
         services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
         services.AddScoped<IStravaTokenService, StravaTokenService>();
         services.AddScoped<IStravaApiClient, StravaApiClient>();

@@ -25,15 +25,18 @@ An internal company web app that tracks employee cycling kilometres during a com
 | Auth | ASP.NET Core Identity + JWT Bearer |
 | Background jobs | Hangfire |
 | CSV export | CsvHelper |
+| Token encryption | ASP.NET Core Data Protection |
 | Client auth | Blazored.LocalStorage + custom `AuthenticationStateProvider` |
+| Testing | xUnit (server), bUnit (client) |
 
 ## Solution Structure
 
 ```
 PedalAcrossCanada.sln
-├── PedalAcrossCanada/             # Blazor WebAssembly client
-├── PedalAcrossCanada.Server/      # ASP.NET Core Web API
-└── PedalAcrossCanada.Shared/      # Shared DTOs and enums
+├── PedalAcrossCanada/               # Blazor WebAssembly client
+├── PedalAcrossCanada.Server/        # ASP.NET Core Web API
+├── PedalAcrossCanada.Shared/        # Shared DTOs and enums
+└── PedalAcrossCanada.Server.Tests/  # xUnit server tests
 ```
 
 ## Prerequisites
@@ -76,13 +79,13 @@ The server seeds default roles (Admin, Participant, TeamCaptain, ExecutiveViewer
 | 2 | Domain model + database | ✅ Complete |
 | 3 | Authentication + Identity | ✅ Complete |
 | 4 | Events + Milestones | ✅ Complete |
-| 5 | Teams + Participants | 🔲 Not started |
-| 6 | Manual activity entry + approval | 🔲 Not started |
+| 5 | Teams + Participants | ✅ Complete |
+| 6 | Manual activity entry + approval | ✅ Complete |
 | 7 | Totals, leaderboards, dashboards | 🔲 Not started |
 | 8 | Badges + Notifications | 🔲 Not started |
 | 9 | Reporting + Audit log | 🔲 Not started |
-| 10 | Strava scaffold | 🔲 Not started |
-| 11 | Strava import + background jobs | 🔲 Not started |
+| 10 | Strava scaffold | ✅ Complete |
+| 11 | Strava import + background jobs | ✅ Complete |
 | 12 | Duplicate detection | 🔲 Not started |
 | 13 | Executive view + polish | 🔲 Not started |
 
