@@ -14,7 +14,7 @@ public class JwtTokenService(IOptions<JwtSettings> jwtSettings) : IJwtTokenServi
 {
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
-    public string GenerateAccessToken(ApplicationUser user, IList<string> roles)
+    public string GenerateAccessToken(ApplicationUser user, IList<string> roles, Guid? participantId = null)
     {
         var claims = new List<Claim>
         {
@@ -26,6 +26,11 @@ public class JwtTokenService(IOptions<JwtSettings> jwtSettings) : IJwtTokenServi
         foreach (var role in roles)
         {
             claims.Add(new Claim("role", role));
+        }
+
+        if (participantId.HasValue)
+        {
+            claims.Add(new Claim("participantId", participantId.Value.ToString()));
         }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key));

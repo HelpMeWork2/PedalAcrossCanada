@@ -8,7 +8,8 @@ namespace PedalAcrossCanada.Services;
 public class AuthHttpService(
     HttpClient httpClient,
     TokenService tokenService,
-    JwtAuthStateProvider authStateProvider)
+    JwtAuthStateProvider authStateProvider,
+    ParticipantStateService participantStateService)
 {
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
@@ -52,6 +53,7 @@ public class AuthHttpService(
 
         await tokenService.ClearAllTokensAsync();
         authStateProvider.NotifyUserLoggedOut();
+        participantStateService.Clear();
     }
 
     public async Task<bool> TryRefreshAsync()

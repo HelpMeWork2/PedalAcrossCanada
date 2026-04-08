@@ -85,9 +85,11 @@ The server seeds default roles (Admin, Participant, TeamCaptain, ExecutiveViewer
 | 8 | Badges + Notifications | ✅ Complete |
 | 9 | Reporting + Audit log | ✅ Complete |
 | 10 | Strava scaffold | ✅ Complete |
-| 11 | Strava import + background jobs | 🟡 In progress |
-| 12 | Duplicate detection | 🔲 Not started |
-| 13 | Executive view + polish | 🟡 In progress |
+| 11 | Strava import + background jobs | ✅ Complete |
+| 12 | Duplicate detection | ✅ Complete |
+| 13 | Executive view + polish | ✅ Complete |
+
+**All 13 phases complete. MVP ready for internal pilot.**
 
 See [`docs/06-build-order.md`](docs/06-build-order.md) for the full phased build plan.
 

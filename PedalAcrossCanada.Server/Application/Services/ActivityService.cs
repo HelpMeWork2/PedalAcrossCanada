@@ -13,7 +13,8 @@ public class ActivityService(
     AppDbContext dbContext,
     IAuditService auditService,
     IMilestoneCalculationService milestoneCalculationService,
-    IBadgeService badgeService) : IActivityService
+    IBadgeService badgeService,
+    IDuplicateService duplicateService) : IActivityService
 {
     public async Task<PagedResult<ActivityDto>> GetAllAsync(
         Guid eventId,
@@ -174,6 +175,9 @@ public class ActivityService(
         // Check for duplicate candidates: same participant + same date + ±10% distance
         var duplicateCandidate = await FindDuplicateCandidateAsync(
             participantId, activity.Id, request.ActivityDate, roundedDistance);
+
+        if (duplicateCandidate.HasValue)
+            await duplicateService.FlagPairAsync(duplicateCandidate.Value, activity.Id, actor);
 
         // Reload with participant for mapping
         var saved = await dbContext.Activities
@@ -495,6 +499,7 @@ public class ActivityService(
         ApprovedAt = activity.ApprovedAt,
         RejectionReason = activity.RejectionReason,
         IsDuplicateFlagged = activity.IsDuplicateFlagged,
+        DuplicateOfActivityId = activity.DuplicateOfActivityId,
         LockedByAdmin = activity.LockedByAdmin,
         CreatedAt = activity.CreatedAt,
         UpdatedAt = activity.UpdatedAt

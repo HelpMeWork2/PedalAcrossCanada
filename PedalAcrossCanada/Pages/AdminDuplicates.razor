@@ -1,0 +1,279 @@
+@page "/admin/duplicates"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject DuplicateHttpService DuplicateService
+@inject EventHttpService EventService
+@using PedalAcrossCanada.Shared.Common
+
+<PageTitle>Duplicate Activities - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Duplicate Activities</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading duplicates..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found.</div>
+}
+else if (_result is null || _result.TotalCount == 0)
+{
+    <div class="alert alert-success">
+        <i class="bi bi-check-circle-fill me-2"></i>No flagged duplicate activities. Great work!
+    </div>
+}
+else
+{
+    <p class="text-muted mb-4">
+        <strong>@_result.TotalCount</strong> flagged pair(s) require review.
+        For each pair, choose to keep both, keep only the first, or keep only the second activity.
+        The discarded activity will be marked as <em>Invalid</em> and excluded from totals.
+    </p>
+
+    @foreach (var pair in _result.Data)
+    {
+        <div class="card mb-4 border-warning">
+            <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2">
+                <i class="bi bi-flag-fill text-warning"></i>
+                <strong>Possible Duplicate</strong>
+                <span class="ms-auto text-muted small">
+                    @pair.First.ParticipantDisplayName &mdash; @pair.First.ActivityDate.ToString("MMM d, yyyy")
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card h-100 @ActivityCardClass(pair.First)">
+                            <div class="card-header fw-semibold">
+                                Activity 1
+                                <span class="badge @StatusBadgeClass(pair.First.Status) ms-2">@pair.First.Status</span>
+                                @if (pair.First.Source == ActivitySource.Strava)
+                                {
+                                    <span class="badge bg-secondary ms-1">Strava</span>
+                                }
+                            </div>
+                            <div class="card-body small">
+                                <dl class="row mb-0">
+                                    <dt class="col-5">Participant</dt>
+                                    <dd class="col-7">@pair.First.ParticipantDisplayName</dd>
+                                    <dt class="col-5">Date</dt>
+                                    <dd class="col-7">@pair.First.ActivityDate.ToString("MMM d, yyyy")</dd>
+                                    <dt class="col-5">Distance</dt>
+                                    <dd class="col-7">@pair.First.DistanceKm.ToString("N2") km</dd>
+                                    <dt class="col-5">Ride Type</dt>
+                                    <dd class="col-7">@pair.First.RideType</dd>
+                                    <dt class="col-5">Source</dt>
+                                    <dd class="col-7">@pair.First.Source</dd>
+                                    <dt class="col-5">Counts</dt>
+                                    <dd class="col-7">@(pair.First.CountsTowardTotal ? "Yes" : "No")</dd>
+                                    @if (!string.IsNullOrWhiteSpace(pair.First.Notes))
+                                    {
+                                        <dt class="col-5">Notes</dt>
+                                        <dd class="col-7 text-truncate" title="@pair.First.Notes">@pair.First.Notes</dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(pair.First.ExternalTitle))
+                                    {
+                                        <dt class="col-5">Strava Title</dt>
+                                        <dd class="col-7 text-truncate" title="@pair.First.ExternalTitle">@pair.First.ExternalTitle</dd>
+                                    }
+                                    <dt class="col-5">Created</dt>
+                                    <dd class="col-7">@pair.First.CreatedAt.ToString("MMM d, yyyy HH:mm") UTC</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 @ActivityCardClass(pair.Second)">
+                            <div class="card-header fw-semibold">
+                                Activity 2
+                                <span class="badge @StatusBadgeClass(pair.Second.Status) ms-2">@pair.Second.Status</span>
+                                @if (pair.Second.Source == ActivitySource.Strava)
+                                {
+                                    <span class="badge bg-secondary ms-1">Strava</span>
+                                }
+                            </div>
+                            <div class="card-body small">
+                                <dl class="row mb-0">
+                                    <dt class="col-5">Participant</dt>
+                                    <dd class="col-7">@pair.Second.ParticipantDisplayName</dd>
+                                    <dt class="col-5">Date</dt>
+                                    <dd class="col-7">@pair.Second.ActivityDate.ToString("MMM d, yyyy")</dd>
+                                    <dt class="col-5">Distance</dt>
+                                    <dd class="col-7">@pair.Second.DistanceKm.ToString("N2") km</dd>
+                                    <dt class="col-5">Ride Type</dt>
+                                    <dd class="col-7">@pair.Second.RideType</dd>
+                                    <dt class="col-5">Source</dt>
+                                    <dd class="col-7">@pair.Second.Source</dd>
+                                    <dt class="col-5">Counts</dt>
+                                    <dd class="col-7">@(pair.Second.CountsTowardTotal ? "Yes" : "No")</dd>
+                                    @if (!string.IsNullOrWhiteSpace(pair.Second.Notes))
+                                    {
+                                        <dt class="col-5">Notes</dt>
+                                        <dd class="col-7 text-truncate" title="@pair.Second.Notes">@pair.Second.Notes</dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(pair.Second.ExternalTitle))
+                                    {
+                                        <dt class="col-5">Strava Title</dt>
+                                        <dd class="col-7 text-truncate" title="@pair.Second.ExternalTitle">@pair.Second.ExternalTitle</dd>
+                                    }
+                                    <dt class="col-5">Created</dt>
+                                    <dd class="col-7">@pair.Second.CreatedAt.ToString("MMM d, yyyy HH:mm") UTC</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    <button class="btn btn-outline-secondary btn-sm"
+                            disabled="@IsResolving(pair)"
+                            @onclick="() => ResolveAsync(pair, DuplicateResolution.KeepBoth)">
+                        @if (IsResolving(pair, DuplicateResolution.KeepBoth))
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Keep Both
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm"
+                            disabled="@IsResolving(pair)"
+                            @onclick="() => ResolveAsync(pair, DuplicateResolution.KeepFirst)">
+                        @if (IsResolving(pair, DuplicateResolution.KeepFirst))
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Keep Activity 1 (invalidate #2)
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm"
+                            disabled="@IsResolving(pair)"
+                            @onclick="() => ResolveAsync(pair, DuplicateResolution.KeepSecond)">
+                        @if (IsResolving(pair, DuplicateResolution.KeepSecond))
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        Keep Activity 2 (invalidate #1)
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_result.TotalPages > 1)
+    {
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm">
+                <li class="page-item @(_result.HasPreviousPage ? "" : "disabled")">
+                    <button class="page-link" @onclick="PreviousPageAsync">Previous</button>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">@_page / @_result.TotalPages</span>
+                </li>
+                <li class="page-item @(_result.HasNextPage ? "" : "disabled")">
+                    <button class="page-link" @onclick="NextPageAsync">Next</button>
+                </li>
+            </ul>
+        </nav>
+    }
+}
+
+@code {
+    private Toast _toast = default!;
+    private EventDto? _activeEvent;
+    private PagedResult<DuplicatePairDto>? _result;
+    private bool _isLoading = true;
+    private int _page = 1;
+    private const int PageSize = 10;
+
+    private record ResolvingKey(Guid ActivityId, DuplicateResolution? Resolution);
+    private ResolvingKey? _resolvingKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+
+            if (_activeEvent is not null)
+                await LoadPageAsync();
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load page: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadPageAsync()
+    {
+        if (_activeEvent is null) return;
+        _result = await DuplicateService.GetFlaggedPairsAsync(_activeEvent.Id, _page, PageSize);
+    }
+
+    private async Task ResolveAsync(DuplicatePairDto pair, DuplicateResolution resolution)
+    {
+        if (_activeEvent is null) return;
+
+        _resolvingKey = new ResolvingKey(pair.Second.Id, resolution);
+
+        try
+        {
+            await DuplicateService.ResolveAsync(_activeEvent.Id, pair.Second.Id, resolution);
+
+            var message = resolution switch
+            {
+                DuplicateResolution.KeepBoth => "Both activities kept. Flags cleared.",
+                DuplicateResolution.KeepFirst => "Activity 1 kept. Activity 2 marked invalid.",
+                DuplicateResolution.KeepSecond => "Activity 2 kept. Activity 1 marked invalid.",
+                _ => "Resolved."
+            };
+
+            _toast.ShowSuccess(message);
+
+            // Reload the page; the resolved pair is no longer flagged
+            if (_result?.Data.Count == 1 && _page > 1)
+                _page--;
+
+            await LoadPageAsync();
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to resolve duplicate: {ex.Message}");
+        }
+        finally
+        {
+            _resolvingKey = null;
+        }
+    }
+
+    private bool IsResolving(DuplicatePairDto pair) =>
+        _resolvingKey?.ActivityId == pair.Second.Id;
+
+    private bool IsResolving(DuplicatePairDto pair, DuplicateResolution resolution) =>
+        _resolvingKey?.ActivityId == pair.Second.Id && _resolvingKey?.Resolution == resolution;
+
+    private async Task PreviousPageAsync()
+    {
+        if (_page > 1) { _page--; await LoadPageAsync(); }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_result?.HasNextPage == true) { _page++; await LoadPageAsync(); }
+    }
+
+    private static string ActivityCardClass(ActivityDto activity) =>
+        activity.Status == ActivityStatus.Invalid ? "border-danger opacity-75" : "";
+
+    private static string StatusBadgeClass(ActivityStatus status) => status switch
+    {
+        ActivityStatus.Approved => "bg-success",
+        ActivityStatus.Pending => "bg-warning text-dark",
+        ActivityStatus.Rejected => "bg-danger",
+        ActivityStatus.Invalid => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+}

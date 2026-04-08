@@ -1,0 +1,198 @@
+@page "/executive"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "ExecutiveViewer,Admin")]
+@inject DashboardHttpService DashboardService
+@inject LeaderboardHttpService LeaderboardService
+@inject ReportHttpService ReportService
+@inject EventHttpService EventService
+@inject IJSRuntime JS
+
+<PageTitle>Executive Summary - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Executive Summary</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading executive summary..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found.</div>
+}
+else if (_dashboard is not null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h5 class="mb-0 text-muted">@_activeEvent.Name</h5>
+            <small class="text-muted">
+                @_activeEvent.StartDate.ToString("MMMM d, yyyy") – @_activeEvent.EndDate.ToString("MMMM d, yyyy")
+            </small>
+        </div>
+        <button class="btn btn-outline-primary @(_downloading ? "disabled" : "")"
+                @onclick="DownloadSummaryAsync">
+            @if (_downloading)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+            }
+            📥 Download Executive Summary CSV
+        </button>
+    </div>
+
+    @* Headline Metrics *@
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card text-center h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="display-6 text-primary fw-bold">@_dashboard.TotalEventKm.ToString("N0")</div>
+                    <div class="text-muted small">Total km logged</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="display-6 fw-bold">@_dashboard.RegisteredParticipants</div>
+                    <div class="text-muted small">Registered participants</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="display-6 text-success fw-bold">@_dashboard.ActiveParticipants</div>
+                    <div class="text-muted small">Active participants</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="display-6 text-warning fw-bold">@_dashboard.CompletedMilestones.Count</div>
+                    <div class="text-muted small">Milestones reached</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Route Progress *@
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header fw-semibold bg-white border-bottom">🗺️ Route Progress — Montreal to Calgary</div>
+        <div class="card-body">
+            <RouteProgressBar TotalKm="_dashboard.TotalEventKm"
+                              RouteDistanceKm="_dashboard.RouteDistanceKm"
+                              PercentComplete="_dashboard.PercentComplete" />
+            <div class="d-flex justify-content-between mt-2 small text-muted">
+                <span>@_dashboard.TotalEventKm.ToString("N0") km logged</span>
+                <span class="fw-semibold">@_dashboard.PercentComplete.ToString("N1")% complete</span>
+                <span>@_dashboard.RouteDistanceKm.ToString("N0") km total route</span>
+            </div>
+            @if (_dashboard.CurrentVirtualLocation is not null)
+            {
+                <div class="mt-2 text-center text-muted small">
+                    📍 Currently near <strong>@_dashboard.CurrentVirtualLocation</strong>
+                </div>
+            }
+            @if (_dashboard.NextMilestone is not null)
+            {
+                <div class="mt-1 text-center text-muted small">
+                    Next milestone: <strong>@_dashboard.NextMilestone.StopName</strong>
+                    (@_dashboard.NextMilestone.CumulativeDistanceKm.ToString("N0") km)
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Leaderboards *@
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header fw-semibold bg-white border-bottom">🏅 Top 10 Individuals</div>
+                <div class="card-body p-0">
+                    @if (_individualEntries.Count == 0)
+                    {
+                        <div class="p-3 text-muted text-center">No data yet.</div>
+                    }
+                    else
+                    {
+                        <IndividualLeaderboardTable Entries="_individualEntries"
+                                                    TotalCount="_individualEntries.Count"
+                                                    PageSize="_individualEntries.Count" />
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header fw-semibold bg-white border-bottom">🏆 Top 10 Teams</div>
+                <div class="card-body p-0">
+                    @if (_teamEntries.Count == 0)
+                    {
+                        <div class="p-3 text-muted text-center">No team data yet.</div>
+                    }
+                    else
+                    {
+                        <TeamLeaderboardTable Entries="_teamEntries" />
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Toast _toast = default!;
+    private EventDto? _activeEvent;
+    private EventDashboardDto? _dashboard;
+    private IReadOnlyList<IndividualLeaderboardEntry> _individualEntries = [];
+    private IReadOnlyList<TeamLeaderboardEntry> _teamEntries = [];
+    private bool _isLoading = true;
+    private bool _downloading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is null)
+                return;
+
+            _dashboard = await DashboardService.GetEventDashboardAsync(_activeEvent.Id);
+            var individual = await LeaderboardService.GetIndividualAsync(_activeEvent.Id, page: 1, pageSize: 10);
+            var teams = await LeaderboardService.GetTeamsAsync(_activeEvent.Id);
+            _individualEntries = individual?.Data ?? [];
+            _teamEntries = (teams ?? []).Take(10).ToList();
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load executive summary. Please try again.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task DownloadSummaryAsync()
+    {
+        if (_activeEvent is null || _downloading)
+            return;
+
+        _downloading = true;
+        try
+        {
+            var bytes = await ReportService.GetExecutiveSummaryReportAsync(_activeEvent.Id);
+            var fileName = $"executive-summary-{DateTime.UtcNow:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "text/csv", bytes);
+            _toast.ShowSuccess($"{fileName} downloaded.");
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to generate executive summary report.");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+}

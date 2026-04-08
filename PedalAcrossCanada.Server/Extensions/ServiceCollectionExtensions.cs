@@ -1,4 +1,6 @@
 using System.Text;
+using Hangfire;
+using Hangfire.InMemory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +81,18 @@ public static class ServiceCollectionExtensions
         // HttpClientFactory for external API calls
         services.AddHttpClient("Strava");
 
+        // Hangfire (in-memory storage for dev; swap to SqlServer in prod)
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseInMemoryStorage());
+        services.AddHangfireServer(options =>
+        {
+            options.WorkerCount = 2;
+            options.Queues = ["strava", "default"];
+        });
+
         // Application services
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
@@ -98,6 +112,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBadgeService, BadgeService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IDuplicateService, DuplicateService>();
 
         return services;
     }

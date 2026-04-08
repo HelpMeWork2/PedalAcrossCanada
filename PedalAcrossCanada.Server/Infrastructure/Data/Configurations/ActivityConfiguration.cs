@@ -35,6 +35,7 @@ public class ActivityConfiguration : IEntityTypeConfiguration<Activity>
             .HasFilter("[ExternalActivityId] IS NOT NULL");
 
         builder.HasIndex(a => new { a.EventId, a.Status });
+        builder.HasIndex(a => new { a.EventId, a.Status, a.CountsTowardTotal });
         builder.HasIndex(a => new { a.ParticipantId, a.ActivityDate });
 
         builder.HasOne(a => a.DuplicateOfActivity)

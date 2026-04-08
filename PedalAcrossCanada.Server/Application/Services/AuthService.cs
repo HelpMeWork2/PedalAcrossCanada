@@ -6,6 +6,7 @@ using PedalAcrossCanada.Server.Configuration;
 using PedalAcrossCanada.Server.Domain.Entities;
 using PedalAcrossCanada.Server.Infrastructure.Data;
 using PedalAcrossCanada.Shared.DTOs.Auth;
+using PedalAcrossCanada.Shared.Enums;
 
 namespace PedalAcrossCanada.Server.Application.Services;
 
@@ -104,7 +105,22 @@ public class AuthService(
     private async Task<AuthResponse> GenerateAuthResponseAsync(ApplicationUser user)
     {
         var roles = await userManager.GetRolesAsync(user);
-        var accessToken = jwtTokenService.GenerateAccessToken(user, roles);
+
+        var activeEvent = await dbContext.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Status == EventStatus.Active);
+
+        Guid? participantId = null;
+        if (activeEvent is not null)
+        {
+            participantId = await dbContext.Participants
+                .AsNoTracking()
+                .Where(p => p.UserId == user.Id && p.EventId == activeEvent.Id)
+                .Select(p => (Guid?)p.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        var accessToken = jwtTokenService.GenerateAccessToken(user, roles, participantId);
         var refreshTokenValue = jwtTokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken

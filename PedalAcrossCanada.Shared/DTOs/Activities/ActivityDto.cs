@@ -22,6 +22,7 @@ public class ActivityDto
     public DateTime? ApprovedAt { get; set; }
     public string? RejectionReason { get; set; }
     public bool IsDuplicateFlagged { get; set; }
+    public Guid? DuplicateOfActivityId { get; set; }
     public bool LockedByAdmin { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

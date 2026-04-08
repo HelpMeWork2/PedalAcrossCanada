@@ -35,4 +35,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 await app.InitialiseDatabaseAsync();
+app.UseHangfire();
 await app.RunAsync();

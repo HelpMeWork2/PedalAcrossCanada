@@ -24,6 +24,7 @@ public class ParticipantConfiguration : IEntityTypeConfiguration<Participant>
 
         builder.HasIndex(p => new { p.EventId, p.WorkEmail }).IsUnique();
         builder.HasIndex(p => new { p.EventId, p.UserId }).IsUnique();
+        builder.HasIndex(p => new { p.EventId, p.Status });
 
         builder.HasMany(p => p.Activities)
             .WithOne(a => a.Participant)

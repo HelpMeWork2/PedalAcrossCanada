@@ -36,5 +36,7 @@ builder.Services.AddScoped<BadgeHttpService>();
 builder.Services.AddScoped<NotificationHttpService>();
 builder.Services.AddScoped<ReportHttpService>();
 builder.Services.AddScoped<AuditHttpService>();
+builder.Services.AddScoped<DuplicateHttpService>();
+builder.Services.AddScoped<ParticipantStateService>();
 
 await builder.Build().RunAsync();

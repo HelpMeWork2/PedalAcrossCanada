@@ -1,5 +1,7 @@
+using Hangfire;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using PedalAcrossCanada.Server.Application.Jobs;
 using PedalAcrossCanada.Server.Domain.Entities;
 using PedalAcrossCanada.Server.Infrastructure.Data;
 
@@ -9,6 +11,42 @@ public static class WebApplicationExtensions
 {
     private static readonly string[] AppRoles =
         ["Admin", "Participant", "TeamCaptain", "ExecutiveViewer"];
+
+    /// <summary>
+    /// Registers Hangfire dashboard (dev only) and all recurring background jobs.
+    /// </summary>
+    public static WebApplication UseHangfire(this WebApplication app)
+    {
+        if (app.Environment.IsDevelopment())
+        {
+            app.MapHangfireDashboard("/hangfire");
+        }
+
+        var recurringJobs = app.Services.GetRequiredService<IRecurringJobManager>();
+
+        recurringJobs.AddOrUpdate<StravaSyncJob>(
+            StravaSyncJob.JobId,
+            StravaSyncJob.Queue,
+            job => job.RunAsync(),
+            StravaSyncJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+        recurringJobs.AddOrUpdate<LeaderboardRefreshJob>(
+            LeaderboardRefreshJob.JobId,
+            LeaderboardRefreshJob.Queue,
+            job => job.RunAsync(),
+            LeaderboardRefreshJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+        recurringJobs.AddOrUpdate<MilestoneRecalculationJob>(
+            MilestoneRecalculationJob.JobId,
+            MilestoneRecalculationJob.Queue,
+            job => job.RunAsync(),
+            MilestoneRecalculationJob.Cron,
+            new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc });
+
+        return app;
+    }
 
     /// <summary>
     /// Runs EF Core migrations, seeds roles, and creates the initial admin user.
