@@ -34,4 +34,30 @@ public class StravaHttpService(ApiClient apiClient)
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<StravaSyncResultDto>();
     }
+
+    public async Task<BulkStravaSyncResultDto?> SyncAllAsync(Guid eventId)
+    {
+        var response = await apiClient.PostAsync($"api/strava/sync-all?eventId={eventId}", new { });
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<BulkStravaSyncResultDto>();
+    }
+
+    public async Task<ClubActivitySyncResultDto?> SyncClubActivitiesAsync(Guid eventId)
+    {
+        var response = await apiClient.PostAsync($"api/strava/sync-club-activities?eventId={eventId}", new { });
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ClubActivitySyncResultDto>();
+    }
+
+    public async Task<List<StravaClubMemberDto>?> GetClubMembersAsync(Guid eventId)
+    {
+        return await apiClient.GetAsync<List<StravaClubMemberDto>>($"api/strava/club-members?eventId={eventId}");
+    }
+
+    public async Task<ImportClubMembersResultDto?> ImportClubMembersAsync(Guid eventId, ImportClubMembersRequest request)
+    {
+        var response = await apiClient.PostAsync($"api/strava/import-club-members?eventId={eventId}", request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ImportClubMembersResultDto>();
+    }
 }

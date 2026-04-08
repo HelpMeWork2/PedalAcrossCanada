@@ -140,6 +140,8 @@ else
                                         <button class="btn btn-outline-secondary"
                                                 @onclick="() => LockAsync(activity)">Lock</button>
                                     }
+                                    <button class="btn btn-outline-danger"
+                                            @onclick="() => ShowDeleteModal(activity)">Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -210,6 +212,43 @@ else
         </div>
     }
 
+    @* Delete Confirmation Modal *@
+    @if (_showDeleteModal && _targetActivity is not null)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Delete Activity</h5>
+                        <button type="button" class="btn-close" @onclick="CloseModals"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Are you sure you want to permanently delete this activity
+                            by <strong>@_targetActivity.ParticipantDisplayName</strong>
+                            on @_targetActivity.ActivityDate.ToString("MMM d, yyyy")
+                            (@_targetActivity.DistanceKm.ToString("N2") km)?
+                        </p>
+                        <div class="alert alert-danger mb-0">
+                            <strong>Warning:</strong> This action cannot be undone.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModals">Cancel</button>
+                        <button type="button" class="btn btn-danger" disabled="@_isProcessing"
+                                @onclick="HandleDeleteAsync">
+                            @if (_isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @* Invalidate Modal *@
     @if (_showInvalidateModal && _targetActivity is not null)
     {
@@ -269,6 +308,7 @@ else
 
     private bool _showRejectModal;
     private bool _showInvalidateModal;
+    private bool _showDeleteModal;
     private ActivityDto? _targetActivity;
     private RejectFormModel _rejectModel = new();
     private InvalidateFormModel _invalidateModel = new();
@@ -350,6 +390,12 @@ else
         _showRejectModal = true;
     }
 
+    private void ShowDeleteModal(ActivityDto activity)
+    {
+        _targetActivity = activity;
+        _showDeleteModal = true;
+    }
+
     private void ShowInvalidateModal(ActivityDto activity)
     {
         _targetActivity = activity;
@@ -361,6 +407,7 @@ else
     {
         _showRejectModal = false;
         _showInvalidateModal = false;
+        _showDeleteModal = false;
         _targetActivity = null;
         _isProcessing = false;
     }
@@ -397,6 +444,26 @@ else
             await ActivityService.InvalidateAsync(_activeEvent.Id, _targetActivity.Id, request);
             _toast.ShowSuccess($"Activity by {_targetActivity.ParticipantDisplayName} invalidated.");
             CloseModals();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError(ex.Message);
+            _isProcessing = false;
+        }
+    }
+
+    private async Task HandleDeleteAsync()
+    {
+        if (_activeEvent is null || _targetActivity is null) return;
+
+        _isProcessing = true;
+        try
+        {
+            await ActivityService.DeleteAsync(_activeEvent.Id, _targetActivity.Id);
+            _toast.ShowSuccess($"Activity by {_targetActivity.ParticipantDisplayName} deleted.");
+            CloseModals();
+            await LoadPendingCountAsync();
             await LoadPageAsync(_currentPage);
         }
         catch (HttpRequestException ex)

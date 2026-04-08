@@ -2,6 +2,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject EventHttpService EventService
 @inject ParticipantHttpService ParticipantService
+@inject StravaHttpService StravaService
 @inject NavigationManager Navigation
 
 <PageTitle>My Profile - Pedal Across Canada</PageTitle>
@@ -107,6 +108,54 @@ else
                 </div>
             </div>
         </div>
+
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-activity"></i> Strava</h5>
+                </div>
+                <div class="card-body">
+                    @if (_isLoadingStrava)
+                    {
+                        <LoadingSpinner Message="Loading Strava status..." />
+                    }
+                    else if (_stravaStatus is not null && _stravaStatus.IsConnected)
+                    {
+                        <div class="mb-3">
+                            <span class="badge bg-success">Connected</span>
+                            @if (!string.IsNullOrEmpty(_stravaStatus.ExternalAthleteId))
+                            {
+                                <span class="text-muted ms-2">Athlete @_stravaStatus.ExternalAthleteId</span>
+                            }
+                        </div>
+                        @if (_stravaStatus.LastSyncAt.HasValue)
+                        {
+                            <p class="text-muted small mb-3">
+                                Last synced: @_stravaStatus.LastSyncAt.Value.ToString("MMM d, yyyy h:mm tt")
+                            </p>
+                        }
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-primary btn-sm" @onclick="HandleSyncAsync" disabled="@_isSyncing">
+                                @if (_isSyncing) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                Sync Now
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @onclick="HandleDisconnectAsync" disabled="@_isSyncing">
+                                Disconnect
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-3">Connect your Strava account to automatically import rides.</p>
+                        <button class="btn btn-warning" @onclick="HandleConnectStravaAsync" disabled="@_isConnectingStrava">
+                            @if (_isConnectingStrava) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            <img src="https://cdn.worldvectorlogo.com/logos/strava-2.svg" alt="Strava" style="height: 20px;" class="me-1" />
+                            Connect with Strava
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
     </div>
 }
 
@@ -118,6 +167,12 @@ else
     private bool _isSaving;
     private ProfileFormModel _formModel = new();
     private Toast _toast = null!;
+
+    // Strava state
+    private StravaStatusDto? _stravaStatus;
+    private bool _isLoadingStrava;
+    private bool _isConnectingStrava;
+    private bool _isSyncing;
 
     protected override async Task OnInitializedAsync()
     {
@@ -144,6 +199,100 @@ else
         finally
         {
             _isLoading = false;
+        }
+
+        if (_event is not null && _participant is not null)
+        {
+            await LoadStravaStatusAsync();
+        }
+    }
+
+    private async Task LoadStravaStatusAsync()
+    {
+        _isLoadingStrava = true;
+        try
+        {
+            _stravaStatus = await StravaService.GetStatusAsync(_event!.Id);
+        }
+        catch (HttpRequestException)
+        {
+            // Strava status not available - leave as null
+        }
+        finally
+        {
+            _isLoadingStrava = false;
+        }
+    }
+
+    private async Task HandleConnectStravaAsync()
+    {
+        if (_event is null) return;
+
+        _isConnectingStrava = true;
+        try
+        {
+            var authUrl = await StravaService.GetAuthUrlAsync(_event.Id);
+            if (authUrl is not null)
+            {
+                Navigation.NavigateTo(authUrl.AuthorizationUrl, forceLoad: true);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Failed to start Strava connection: {ex.Message}");
+            _isConnectingStrava = false;
+        }
+    }
+
+    private async Task HandleSyncAsync()
+    {
+        if (_event is null) return;
+
+        _isSyncing = true;
+        try
+        {
+            var result = await StravaService.ManualSyncAsync(_event.Id);
+            if (result is not null)
+            {
+                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                {
+                    _toast.ShowError(result.ErrorMessage);
+                }
+                else
+                {
+                    _toast.ShowSuccess($"Sync complete: {result.ImportedCount} imported, {result.SkippedDuplicateCount} skipped.");
+                }
+            }
+            await LoadStravaStatusAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Sync failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    private async Task HandleDisconnectAsync()
+    {
+        if (_event is null) return;
+
+        _isSyncing = true;
+        try
+        {
+            await StravaService.DisconnectAsync(_event.Id);
+            _stravaStatus = null;
+            _toast.ShowSuccess("Strava disconnected.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Disconnect failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSyncing = false;
         }
     }
 

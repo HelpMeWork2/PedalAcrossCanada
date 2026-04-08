@@ -29,5 +29,6 @@ builder.Services.AddScoped<MilestoneHttpService>();
 builder.Services.AddScoped<TeamHttpService>();
 builder.Services.AddScoped<ParticipantHttpService>();
 builder.Services.AddScoped<ActivityHttpService>();
+builder.Services.AddScoped<StravaHttpService>();
 
 await builder.Build().RunAsync();

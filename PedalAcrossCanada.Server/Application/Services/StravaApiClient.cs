@@ -77,19 +77,187 @@ public class StravaApiClient(
         };
     }
 
+    public async Task<IReadOnlyList<StravaClubMember>> GetClubMembersAsync(
+        string accessToken,
+        string clubId,
+        int page = 1,
+        int perPage = 200)
+    {
+        var client = httpClientFactory.CreateClient("Strava");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var allMembers = new List<StravaClubMember>();
+        var currentPage = page;
+
+        while (true)
+        {
+            var url = $"https://www.strava.com/api/v3/clubs/{clubId}/members" +
+                      $"?page={currentPage}&per_page={perPage}";
+
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var members = JsonSerializer.Deserialize<List<StravaClubMemberApiResponse>>(json, JsonSerializerOptions.Web) ?? [];
+
+            if (members.Count == 0)
+                break;
+
+            allMembers.AddRange(members.Select(m => new StravaClubMember
+            {
+                AthleteId = m.Id,
+                FirstName = m.FirstName ?? string.Empty,
+                LastName = m.LastName ?? string.Empty,
+                ProfilePictureUrl = m.Profile,
+                IsOwner = m.Owner,
+                IsAdmin = m.Admin
+            }));
+
+            if (members.Count < perPage)
+                break;
+
+            currentPage++;
+        }
+
+        return allMembers;
+    }
+
+    public async Task<IReadOnlyList<StravaClubActivity>> GetClubActivitiesAsync(
+        string accessToken,
+        string clubId,
+        int page = 1,
+        int perPage = 200)
+    {
+        var client = httpClientFactory.CreateClient("Strava");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var allActivities = new List<StravaClubActivity>();
+        var currentPage = page;
+
+        while (true)
+        {
+            var url = $"https://www.strava.com/api/v3/clubs/{clubId}/activities" +
+                      $"?page={currentPage}&per_page={perPage}";
+
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var activities = JsonSerializer.Deserialize<List<StravaClubActivityApiResponse>>(json, JsonSerializerOptions.Web) ?? [];
+
+            if (activities.Count == 0)
+                break;
+
+            allActivities.AddRange(activities.Select(a => new StravaClubActivity
+            {
+                AthleteFirstName = a.Athlete?.FirstName ?? string.Empty,
+                AthleteLastName = a.Athlete?.LastName ?? string.Empty,
+                Name = a.Name ?? string.Empty,
+                Distance = a.Distance,
+                MovingTime = a.MovingTime,
+                ElapsedTime = a.ElapsedTime,
+                TotalElevationGain = a.TotalElevationGain,
+                Type = a.Type ?? string.Empty,
+                SportType = a.SportType ?? string.Empty,
+                StartDateLocal = a.StartDateLocal
+            }));
+
+            if (activities.Count < perPage)
+                break;
+
+            currentPage++;
+        }
+
+        return allActivities;
+    }
+
     private sealed class StravaApiActivity
     {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public long Id { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
         public string? Name { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
         public string? Type { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("distance")]
         public float Distance { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("start_date_local")]
         public DateTime StartDateLocal { get; set; }
     }
 
     private sealed class StravaTokenRefreshApiResponse
     {
+        [System.Text.Json.Serialization.JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("expires_at")]
         public long ExpiresAt { get; set; }
+    }
+
+    private sealed class StravaClubMemberApiResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public long Id { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("firstname")]
+        public string? FirstName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastname")]
+        public string? LastName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("profile")]
+        public string? Profile { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("owner")]
+        public bool Owner { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("admin")]
+        public bool Admin { get; set; }
+    }
+
+    private sealed class StravaClubActivityApiResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("athlete")]
+        public StravaClubActivityAthleteResponse? Athlete { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("distance")]
+        public float Distance { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("moving_time")]
+        public int MovingTime { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("elapsed_time")]
+        public int ElapsedTime { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("total_elevation_gain")]
+        public float TotalElevationGain { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("sport_type")]
+        public string? SportType { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("start_date_local")]
+        public DateTime? StartDateLocal { get; set; }
+    }
+
+    private sealed class StravaClubActivityAthleteResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("firstname")]
+        public string? FirstName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastname")]
+        public string? LastName { get; set; }
     }
 }

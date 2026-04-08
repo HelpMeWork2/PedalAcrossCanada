@@ -52,6 +52,42 @@ public sealed class FakeStravaApiClient : IStravaApiClient
         });
     }
 
+    /// <summary>Members returned by <see cref="GetClubMembersAsync"/>.</summary>
+    public List<StravaClubMember> ClubMembers { get; set; } = [];
+
+    /// <summary>If set, <see cref="GetClubMembersAsync"/> throws this exception.</summary>
+    public Exception? GetClubMembersException { get; set; }
+
+    public Task<IReadOnlyList<StravaClubMember>> GetClubMembersAsync(
+        string accessToken,
+        string clubId,
+        int page = 1,
+        int perPage = 200)
+    {
+        if (GetClubMembersException is not null)
+            throw GetClubMembersException;
+
+        return Task.FromResult<IReadOnlyList<StravaClubMember>>(ClubMembers);
+    }
+
+    /// <summary>Activities returned by <see cref="GetClubActivitiesAsync"/>.</summary>
+    public List<StravaClubActivity> ClubActivities { get; set; } = [];
+
+    /// <summary>If set, <see cref="GetClubActivitiesAsync"/> throws this exception.</summary>
+    public Exception? GetClubActivitiesException { get; set; }
+
+    public Task<IReadOnlyList<StravaClubActivity>> GetClubActivitiesAsync(
+        string accessToken,
+        string clubId,
+        int page = 1,
+        int perPage = 200)
+    {
+        if (GetClubActivitiesException is not null)
+            throw GetClubActivitiesException;
+
+        return Task.FromResult<IReadOnlyList<StravaClubActivity>>(ClubActivities);
+    }
+
     public record GetActivitiesCall(
         string AccessToken,
         DateTime After,

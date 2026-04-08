@@ -13,4 +13,5 @@ public interface IParticipantService
     Task<ParticipantDto> DeactivateAsync(Guid eventId, Guid participantId, string actor);
     Task<ParticipantDto> ReactivateAsync(Guid eventId, Guid participantId, string actor);
     Task<ParticipantDto> ChangeTeamAsync(Guid eventId, Guid participantId, Guid teamId, string actor);
+    Task DeleteAsync(Guid eventId, Guid participantId, string actor);
 }

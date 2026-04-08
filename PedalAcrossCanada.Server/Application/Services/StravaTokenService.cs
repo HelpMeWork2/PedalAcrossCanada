@@ -172,14 +172,22 @@ public class StravaTokenService(
 
     private sealed class StravaOAuthResponse
     {
+        [System.Text.Json.Serialization.JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("refresh_token")]
         public string? RefreshToken { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("expires_at")]
         public long ExpiresAt { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("athlete")]
         public StravaAthlete? Athlete { get; set; }
     }
 
     private sealed class StravaAthlete
     {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
         public long Id { get; set; }
     }
 }

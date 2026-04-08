@@ -1,0 +1,97 @@
+@page "/strava/callback"
+@inject StravaHttpService StravaService
+@inject AuthHttpService AuthHttpService
+@inject NavigationManager Navigation
+
+<PageTitle>Strava Connection - Pedal Across Canada</PageTitle>
+
+<div class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
+    @if (_isProcessing)
+    {
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Connecting...</span>
+            </div>
+            <p class="text-muted">Connecting your Strava account...</p>
+        </div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div class="text-center">
+            <div class="alert alert-danger" style="max-width: 500px;">
+                <h5 class="alert-heading">Connection Failed</h5>
+                <p class="mb-2">@_errorMessage</p>
+                <hr />
+                <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateToProfile">
+                    Back to Profile
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center">
+            <div class="alert alert-success" style="max-width: 500px;">
+                <h5 class="alert-heading">Strava Connected!</h5>
+                <p class="mb-2">Your Strava account has been linked successfully.</p>
+                <hr />
+                <p class="mb-0 text-muted">Redirecting to your profile...</p>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "code")]
+    public string? Code { get; set; }
+
+    [SupplyParameterFromQuery(Name = "state")]
+    public string? State { get; set; }
+
+    private bool _isProcessing = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Strava redirects here via full page load, so the in-memory access token is lost.
+        // Restore the session from the refresh token before proceeding.
+        var authenticated = await AuthHttpService.TryRefreshAsync();
+        if (!authenticated)
+        {
+            var returnUrl = Uri.EscapeDataString(Navigation.Uri);
+            Navigation.NavigateTo($"/login?returnUrl={returnUrl}");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Code))
+        {
+            _errorMessage = "No authorization code received from Strava.";
+            _isProcessing = false;
+            return;
+        }
+
+        if (!Guid.TryParse(State, out var participantId) || participantId == Guid.Empty)
+        {
+            _errorMessage = "Invalid callback state. Please try connecting again from your profile.";
+            _isProcessing = false;
+            return;
+        }
+
+        try
+        {
+            await StravaService.CallbackAsync(Code, participantId);
+            _isProcessing = false;
+            StateHasChanged();
+
+            await Task.Delay(1500);
+            Navigation.NavigateTo("/profile");
+        }
+        catch (HttpRequestException ex)
+        {
+            _errorMessage = $"Failed to connect Strava: {ex.Message}";
+            _isProcessing = false;
+        }
+    }
+
+    private void NavigateToProfile() => Navigation.NavigateTo("/profile");
+}

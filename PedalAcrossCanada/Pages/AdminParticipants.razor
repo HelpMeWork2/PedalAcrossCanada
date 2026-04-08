@@ -3,6 +3,7 @@
 @inject ParticipantHttpService ParticipantService
 @inject TeamHttpService TeamService
 @inject EventHttpService EventService
+@inject StravaHttpService StravaService
 @inject NavigationManager Navigation
 
 <PageTitle>Participants - Pedal Across Canada</PageTitle>
@@ -11,7 +12,42 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3>Participants</h3>
-    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateBack">← Back to Events</button>
+    <div class="d-flex gap-2">
+        @if (_event is not null && _event.StravaEnabled)
+        {
+            <button class="btn btn-success btn-sm" @onclick="HandleLoadClubMembersAsync" disabled="@_isLoadingClub">
+                @if (_isLoadingClub)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span><text>Loading&hellip;</text>
+                }
+                else
+                {
+                    <span>👥 Import from Strava Club</span>
+                }
+            </button>
+            <button class="btn btn-warning btn-sm" @onclick="HandleSyncAllStravaAsync" disabled="@_isSyncingAll">
+                @if (_isSyncingAll)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span><text>Syncing&hellip;</text>
+                }
+                else
+                {
+                    <span>🔄 Sync All Strava</span>
+                }
+            </button>
+            <button class="btn btn-info btn-sm" @onclick="HandleSyncClubActivitiesAsync" disabled="@_isSyncingClubActivities">
+                @if (_isSyncingClubActivities)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span><text>Syncing Club&hellip;</text>
+                }
+                else
+                {
+                    <span>🏊 Sync Club Activities</span>
+                }
+            </button>
+        }
+        <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateBack">← Back to Events</button>
+    </div>
 </div>
 
 @if (_event is not null)
@@ -42,6 +78,8 @@ else
                         <th>Status</th>
                         <th>Joined</th>
                         <th>Leaderboard</th>
+                        <th>Strava</th>
+                        <th>Last Sync</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -61,6 +99,25 @@ else
                             <td>@p.JoinedAt.ToString("MMM d, yyyy")</td>
                             <td>@(p.LeaderboardOptIn ? "Yes" : "No")</td>
                             <td>
+                                @if (p.StravaConnected)
+                                {
+                                    <span class="badge bg-success">Connected</span>
+                                }
+                                else if (p.StravaConnectionStatus == ConnectionStatus.RequiresReauth)
+                                {
+                                    <span class="badge bg-warning text-dark">Reauth Needed</span>
+                                }
+                                else if (p.StravaConnectionStatus == ConnectionStatus.Disconnected)
+                                {
+                                    <span class="badge bg-secondary">Disconnected</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td>@(p.StravaLastSyncAt?.ToString("MMM d, yyyy h:mm tt") ?? "—")</td>
+                            <td>
                                 <div class="btn-group btn-group-sm">
                                     @if (p.Status == ParticipantStatus.Active)
                                     {
@@ -74,6 +131,8 @@ else
                                     }
                                     <button class="btn btn-outline-info"
                                             @onclick="() => ShowChangeTeamForm(p)">Change Team</button>
+                                    <button class="btn btn-outline-danger"
+                                            @onclick="() => ShowDeleteModal(p)">Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -147,6 +206,145 @@ else
             </div>
         </div>
     }
+
+    @* Delete Confirmation Modal *@
+    @if (_showDeleteModal && _deleteTargetParticipant is not null)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Delete Participant</h5>
+                        <button type="button" class="btn-close" @onclick="CloseDeleteModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Are you sure you want to permanently delete
+                            <strong>@_deleteTargetParticipant.DisplayName</strong>
+                            (@_deleteTargetParticipant.WorkEmail)?
+                        </p>
+                        <div class="alert alert-danger mb-0">
+                            <strong>Warning:</strong> This will also delete all activities, badge awards,
+                            and external connections for this participant. This action cannot be undone.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                        <button type="button" class="btn btn-danger" disabled="@_isDeleting"
+                                @onclick="HandleDeleteAsync">
+                            @if (_isDeleting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Import from Strava Club modal *@
+    @if (_showClubMembersModal)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Strava Club Members</h5>
+                        <button type="button" class="btn-close" @onclick="CloseClubMembersModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (_clubMembers.Count == 0)
+                        {
+                            <div class="alert alert-info">No members found in the Strava club.</div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-3">
+                                @_clubMembers.Count member(s) found. Select members to import and provide their work email.
+                            </p>
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px;">
+                                            <input type="checkbox" class="form-check-input"
+                                                   checked="@_selectAllClubMembers"
+                                                   @onchange="ToggleSelectAll" />
+                                        </th>
+                                        <th>Name</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Work Email</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (var i = 0; i < _clubMembers.Count; i++)
+                                    {
+                                        var index = i;
+                                        var m = _clubMembers[index];
+                                        <tr class="@(m.AlreadyRegistered ? "table-secondary" : "")">
+                                            <td>
+                                                @if (m.AlreadyRegistered)
+                                                {
+                                                    <input type="checkbox" class="form-check-input" disabled />
+                                                }
+                                                else
+                                                {
+                                                    <input type="checkbox" class="form-check-input"
+                                                           checked="@IsClubMemberSelected(index)"
+                                                           @onchange="() => ToggleClubMemberSelection(index)" />
+                                                }
+                                            </td>
+                                            <td>@m.FirstName @m.LastName</td>
+                                            <td>
+                                                @if (m.IsOwner) { <span class="badge bg-primary">Owner</span> }
+                                                else if (m.IsAdmin) { <span class="badge bg-info">Admin</span> }
+                                                else { <span class="badge bg-secondary">Member</span> }
+                                            </td>
+                                            <td>
+                                                @if (m.AlreadyRegistered)
+                                                {
+                                                    <span class="badge bg-success">Registered</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning text-dark">Not Registered</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!m.AlreadyRegistered)
+                                                {
+                                                    <input type="email" class="form-control form-control-sm"
+                                                           placeholder="email@company.com"
+                                                           value="@GetClubMemberEmail(index)"
+                                                           @onchange="(e) => SetClubMemberEmail(index, e.Value?.ToString() ?? string.Empty)" />
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">—</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <span class="me-auto text-muted">@_selectedClubMemberIds.Count selected</span>
+                        <button type="button" class="btn btn-secondary" @onclick="CloseClubMembersModal">Cancel</button>
+                        <button type="button" class="btn btn-success"
+                                disabled="@(_isImporting || _selectedClubMemberIds.Count == 0)"
+                                @onclick="HandleImportClubMembersAsync">
+                            @if (_isImporting) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Import Selected (@_selectedClubMemberIds.Count)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -160,6 +358,13 @@ else
     private int _currentPage = 1;
     private int _totalPages = 1;
     private Toast _toast = null!;
+    private bool _isSyncingAll;
+    private bool _isSyncingClubActivities;
+
+    // Delete
+    private bool _showDeleteModal;
+    private bool _isDeleting;
+    private ParticipantDto? _deleteTargetParticipant;
 
     // Change team
     private bool _showChangeTeamForm;
@@ -268,6 +473,260 @@ else
         finally
         {
             _isSaving = false;
+        }
+    }
+
+    private async Task HandleSyncAllStravaAsync()
+    {
+        _isSyncingAll = true;
+        try
+        {
+            var result = await StravaService.SyncAllAsync(EventId);
+            if (result is not null)
+            {
+                var message = $"Synced {result.SuccessfulSyncs}/{result.TotalParticipants} participants. " +
+                              $"Imported: {result.TotalImported}, Skipped: {result.TotalSkippedDuplicates}";
+
+                if (result.FailedSyncs > 0)
+                {
+                    _toast.ShowError($"{message}. {result.FailedSyncs} failed.");
+                }
+                else
+                {
+                    _toast.ShowSuccess(message);
+                }
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Sync failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSyncingAll = false;
+        }
+    }
+
+    private async Task HandleSyncClubActivitiesAsync()
+    {
+        _isSyncingClubActivities = true;
+        try
+        {
+            var result = await StravaService.SyncClubActivitiesAsync(EventId);
+            if (result is not null)
+            {
+                var message = $"Fetched: {result.TotalActivitiesFetched}, Imported: {result.ImportedCount}, " +
+                              $"Duplicates: {result.SkippedDuplicateCount}, Out of range: {result.SkippedOutOfRangeCount}, " +
+                              $"Unmatched: {result.UnmatchedCount}";
+
+                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                {
+                    _toast.ShowError(result.ErrorMessage);
+                }
+                else if (result.Errors.Count > 0)
+                {
+                    _toast.ShowError($"{message}. Warnings: {string.Join("; ", result.Errors)}");
+                }
+                else
+                {
+                    _toast.ShowSuccess(message);
+                }
+            }
+
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Club activity sync failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSyncingClubActivities = false;
+        }
+    }
+
+    // ---- Club Members Import ----
+    private bool _showClubMembersModal;
+    private bool _isLoadingClub;
+    private bool _isImporting;
+    private bool _selectAllClubMembers;
+    private List<StravaClubMemberDto> _clubMembers = [];
+    private HashSet<int> _selectedClubMemberIds = [];
+    private Dictionary<int, string> _clubMemberEmails = [];
+
+    private async Task HandleLoadClubMembersAsync()
+    {
+        _isLoadingClub = true;
+        try
+        {
+            var members = await StravaService.GetClubMembersAsync(EventId);
+            _clubMembers = members ?? [];
+            _selectedClubMemberIds = [];
+            _clubMemberEmails = [];
+            _selectAllClubMembers = false;
+
+            // Pre-fill emails from server-generated suggestions
+            for (var i = 0; i < _clubMembers.Count; i++)
+            {
+                var m = _clubMembers[i];
+                if (!m.AlreadyRegistered && !string.IsNullOrWhiteSpace(m.SuggestedEmail))
+                {
+                    _clubMemberEmails[i] = m.SuggestedEmail!;
+                }
+            }
+
+            _showClubMembersModal = true;
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Failed to load club members: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingClub = false;
+        }
+    }
+
+    private void CloseClubMembersModal()
+    {
+        _showClubMembersModal = false;
+        _clubMembers = [];
+        _selectedClubMemberIds = [];
+        _clubMemberEmails = [];
+    }
+
+    private bool IsClubMemberSelected(int index) => _selectedClubMemberIds.Contains(index);
+
+    private void ToggleClubMemberSelection(int index)
+    {
+        if (!_selectedClubMemberIds.Remove(index))
+            _selectedClubMemberIds.Add(index);
+    }
+
+    private void ToggleSelectAll()
+    {
+        _selectAllClubMembers = !_selectAllClubMembers;
+        if (_selectAllClubMembers)
+        {
+            for (var i = 0; i < _clubMembers.Count; i++)
+            {
+                if (!_clubMembers[i].AlreadyRegistered)
+                    _selectedClubMemberIds.Add(i);
+            }
+        }
+        else
+        {
+            _selectedClubMemberIds.Clear();
+        }
+    }
+
+    private string GetClubMemberEmail(int index) =>
+        _clubMemberEmails.TryGetValue(index, out var email) ? email : string.Empty;
+
+    private void SetClubMemberEmail(int index, string email)
+    {
+        _clubMemberEmails[index] = email;
+    }
+
+    private async Task HandleImportClubMembersAsync()
+    {
+        var entries = new List<ImportClubMemberEntry>();
+        var validationErrors = new List<string>();
+
+        foreach (var index in _selectedClubMemberIds)
+        {
+            if (index < 0 || index >= _clubMembers.Count) continue;
+            var member = _clubMembers[index];
+
+            if (!_clubMemberEmails.TryGetValue(index, out var email) || string.IsNullOrWhiteSpace(email))
+            {
+                validationErrors.Add($"{member.FirstName} {member.LastName}: email required.");
+                continue;
+            }
+
+            entries.Add(new ImportClubMemberEntry
+            {
+                AthleteId = member.AthleteId,
+                FirstName = member.FirstName,
+                LastName = member.LastName,
+                WorkEmail = email.Trim(),
+                DisplayName = $"{member.FirstName} {member.LastName}"
+            });
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            _toast.ShowError(string.Join(" ", validationErrors));
+            return;
+        }
+
+        if (entries.Count == 0)
+        {
+            _toast.ShowError("No valid members to import.");
+            return;
+        }
+
+        _isImporting = true;
+        try
+        {
+            var result = await StravaService.ImportClubMembersAsync(EventId,
+                new ImportClubMembersRequest { Members = entries });
+
+            if (result is not null)
+            {
+                var message = $"Imported: {result.Imported}, Skipped: {result.SkippedAlreadyRegistered}";
+                if (result.Errors.Count > 0)
+                {
+                    _toast.ShowError($"{message}. Errors: {string.Join("; ", result.Errors)}");
+                }
+                else
+                {
+                    _toast.ShowSuccess(message);
+                }
+            }
+
+            CloseClubMembersModal();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Import failed: {ex.Message}");
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+    private void ShowDeleteModal(ParticipantDto participant)
+    {
+        _deleteTargetParticipant = participant;
+        _showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        _showDeleteModal = false;
+        _deleteTargetParticipant = null;
+        _isDeleting = false;
+    }
+
+    private async Task HandleDeleteAsync()
+    {
+        if (_deleteTargetParticipant is null) return;
+
+        _isDeleting = true;
+        try
+        {
+            await ParticipantService.DeleteAsync(EventId, _deleteTargetParticipant.Id);
+            _toast.ShowSuccess($"Participant {_deleteTargetParticipant.DisplayName} deleted.");
+            CloseDeleteModal();
+            await LoadPageAsync(_currentPage);
+        }
+        catch (HttpRequestException ex)
+        {
+            _toast.ShowError($"Delete failed: {ex.Message}");
+            _isDeleting = false;
         }
     }
 

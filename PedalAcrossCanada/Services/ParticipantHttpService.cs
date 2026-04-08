@@ -64,4 +64,11 @@ public class ParticipantHttpService(ApiClient apiClient)
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ParticipantDto>();
     }
+
+    public async Task DeleteAsync(Guid eventId, Guid participantId)
+    {
+        var response = await apiClient.DeleteAsync(
+            $"api/events/{eventId}/participants/{participantId}");
+        response.EnsureSuccessStatusCode();
+    }
 }

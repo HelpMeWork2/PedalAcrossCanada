@@ -111,6 +111,17 @@ public class ParticipantsController(IParticipantService participantService) : Ap
         return Ok(result);
     }
 
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid eventId, Guid id)
+    {
+        var actor = GetUserId();
+        await participantService.DeleteAsync(eventId, id, actor);
+        return NoContent();
+    }
+
     private string GetUserId() =>
         User.FindFirstValue(JwtRegisteredClaimNames.Sub)
         ?? throw new UnauthorizedAccessException("User identity not found.");

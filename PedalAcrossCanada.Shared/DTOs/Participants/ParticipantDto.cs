@@ -17,6 +17,9 @@ public class ParticipantDto
     public DateTime JoinedAt { get; set; }
     public bool LeaderboardOptIn { get; set; }
     public bool StravaConsentGiven { get; set; }
+    public bool StravaConnected { get; set; }
+    public ConnectionStatus? StravaConnectionStatus { get; set; }
+    public DateTime? StravaLastSyncAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

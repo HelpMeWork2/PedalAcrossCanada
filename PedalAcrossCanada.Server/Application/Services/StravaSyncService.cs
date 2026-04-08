@@ -195,4 +195,222 @@ public class StravaSyncService(
 
         return result;
     }
+
+    public async Task<BulkStravaSyncResultDto> SyncAllForEventAsync(Guid eventId, string actor)
+    {
+        var ev = await dbContext.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == eventId)
+            ?? throw new KeyNotFoundException($"Event '{eventId}' not found.");
+
+        if (ev.Status != EventStatus.Active)
+            throw new InvalidOperationException("Can only sync activities for an active event.");
+
+        if (!ev.StravaEnabled)
+            throw new InvalidOperationException("Strava integration is not enabled for this event.");
+
+        // Find all participants with a connected Strava account
+        var connectedParticipantIds = await dbContext.ExternalConnections
+            .AsNoTracking()
+            .Where(ec => ec.Provider == "Strava"
+                && ec.ConnectionStatus == ConnectionStatus.Connected
+                && ec.Participant.EventId == eventId
+                && ec.Participant.Status == ParticipantStatus.Active)
+            .Select(ec => new { ec.ParticipantId, ParticipantName = ec.Participant.DisplayName })
+            .ToListAsync();
+
+        var bulkResult = new BulkStravaSyncResultDto
+        {
+            TotalParticipants = connectedParticipantIds.Count
+        };
+
+        foreach (var entry in connectedParticipantIds)
+        {
+            try
+            {
+                var result = await SyncParticipantAsync(entry.ParticipantId, actor);
+
+                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                {
+                    bulkResult.FailedSyncs++;
+                    bulkResult.Errors.Add($"{entry.ParticipantName}: {result.ErrorMessage}");
+                }
+                else
+                {
+                    bulkResult.SuccessfulSyncs++;
+                    bulkResult.TotalImported += result.ImportedCount;
+                    bulkResult.TotalSkippedDuplicates += result.SkippedDuplicateCount;
+                    bulkResult.TotalSkippedOutOfRange += result.SkippedOutOfRangeCount;
+                }
+            }
+            catch (Exception ex)
+            {
+                bulkResult.FailedSyncs++;
+                bulkResult.Errors.Add($"{entry.ParticipantName}: {ex.Message}");
+                logger.LogError(ex, "Bulk sync failed for participant {ParticipantId}", entry.ParticipantId);
+            }
+        }
+
+        await auditService.LogAsync(
+            actor,
+            "StravaBulkSync",
+            "Event",
+            eventId.ToString(),
+            eventId,
+            afterSummary: $"Synced {bulkResult.SuccessfulSyncs}/{bulkResult.TotalParticipants} participants. Imported: {bulkResult.TotalImported}");
+
+        return bulkResult;
+    }
+
+    public async Task<ClubActivitySyncResultDto> SyncClubActivitiesAsync(
+        Guid eventId, string accessToken, string clubId, string actor)
+    {
+        var ev = await dbContext.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == eventId)
+            ?? throw new KeyNotFoundException($"Event '{eventId}' not found.");
+
+        if (ev.Status != EventStatus.Active)
+            throw new InvalidOperationException("Can only sync activities for an active event.");
+
+        if (!ev.StravaEnabled)
+            throw new InvalidOperationException("Strava integration is not enabled for this event.");
+
+        var result = new ClubActivitySyncResultDto();
+
+        try
+        {
+            // Fetch club activities from Strava using admin's token
+            var clubActivities = await stravaApiClient.GetClubActivitiesAsync(accessToken, clubId);
+            result.TotalActivitiesFetched = clubActivities.Count;
+
+            // Load all active participants for this event
+            var participants = await dbContext.Participants
+                .AsNoTracking()
+                .Where(p => p.EventId == eventId && p.Status == ParticipantStatus.Active)
+                .Select(p => new { p.Id, p.FirstName, p.LastName })
+                .ToListAsync();
+
+            // Build lookup by normalized (firstName, lastName) → participant
+            // Group to detect ambiguous name matches
+            var nameLookup = participants
+                .GroupBy(p => (
+                    First: p.FirstName.Trim().ToLowerInvariant(),
+                    Last: p.LastName.Trim().ToLowerInvariant()))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToList());
+
+            // Load existing club-synced external IDs for dedup
+            var existingExternalIds = await dbContext.Activities
+                .AsNoTracking()
+                .Where(a => a.EventId == eventId
+                    && a.ExternalActivityId != null
+                    && a.ExternalActivityId.StartsWith("club:"))
+                .Select(a => a.ExternalActivityId!)
+                .ToHashSetAsync();
+
+            foreach (var ca in clubActivities)
+            {
+                // Filter unsupported activity types
+                if (!SupportedActivityTypes.Contains(ca.Type))
+                {
+                    result.SkippedUnsupportedTypeCount++;
+                    continue;
+                }
+
+                var distanceKm = Math.Round((decimal)ca.Distance / 1000m, 2, MidpointRounding.AwayFromZero);
+                if (distanceKm <= 0)
+                {
+                    result.SkippedUnsupportedTypeCount++;
+                    continue;
+                }
+
+                // Filter activities outside the event date range
+                if (ca.StartDateLocal.HasValue
+                    && (ca.StartDateLocal.Value.Date < ev.StartDate.Date
+                        || ca.StartDateLocal.Value.Date > ev.EndDate.Date))
+                {
+                    result.SkippedOutOfRangeCount++;
+                    continue;
+                }
+
+                // Match athlete to participant by name
+                var nameKey = (
+                    First: ca.AthleteFirstName.Trim().ToLowerInvariant(),
+                    Last: ca.AthleteLastName.Trim().ToLowerInvariant());
+
+                if (!nameLookup.TryGetValue(nameKey, out var matched) || matched.Count == 0)
+                {
+                    result.UnmatchedCount++;
+                    continue;
+                }
+
+                if (matched.Count > 1)
+                {
+                    result.Errors.Add(
+                        $"Ambiguous match for {ca.AthleteFirstName} {ca.AthleteLastName}: " +
+                        $"{matched.Count} participants share this name. Skipped.");
+                    result.UnmatchedCount++;
+                    continue;
+                }
+
+                var participantId = matched[0].Id;
+
+                // Generate composite external ID for dedup (no activity ID from club API)
+                var compositeKey = $"club:{participantId}:{ca.Name}:{distanceKm}:{ca.MovingTime}";
+
+                if (existingExternalIds.Contains(compositeKey))
+                {
+                    result.SkippedDuplicateCount++;
+                    continue;
+                }
+
+                var activityDate = ca.StartDateLocal.HasValue
+                    ? DateTime.SpecifyKind(ca.StartDateLocal.Value, DateTimeKind.Utc)
+                    : DateTime.UtcNow;
+
+                var activity = new Activity
+                {
+                    ParticipantId = participantId,
+                    EventId = eventId,
+                    ActivityDate = activityDate,
+                    DistanceKm = distanceKm,
+                    RideType = RideType.Other,
+                    Source = ActivitySource.Strava,
+                    Status = ActivityStatus.Approved,
+                    CountsTowardTotal = true,
+                    ExternalActivityId = compositeKey,
+                    ExternalTitle = ca.Name,
+                    Notes = "Imported via Strava Club sync",
+                    ImportedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                dbContext.Activities.Add(activity);
+                existingExternalIds.Add(compositeKey);
+                result.ImportedCount++;
+            }
+
+            await dbContext.SaveChangesAsync();
+
+            await auditService.LogAsync(
+                actor,
+                "StravaClubSync",
+                "Event",
+                eventId.ToString(),
+                eventId,
+                afterSummary: $"Club activities synced. Fetched: {result.TotalActivitiesFetched}, " +
+                              $"Imported: {result.ImportedCount}, Duplicates: {result.SkippedDuplicateCount}, " +
+                              $"OutOfRange: {result.SkippedOutOfRangeCount}, Unmatched: {result.UnmatchedCount}");
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Strava API error during club activities sync for event {EventId}", eventId);
+            result.ErrorMessage = "Failed to fetch club activities from Strava. Please try again.";
+        }
+
+        return result;
+    }
 }

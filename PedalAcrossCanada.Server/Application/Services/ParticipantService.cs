@@ -21,7 +21,8 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
         var query = dbContext.Participants
             .AsNoTracking()
             .Where(p => p.EventId == eventId)
-            .Include(p => p.Team);
+            .Include(p => p.Team)
+            .Include(p => p.ExternalConnections);
 
         var totalCount = await query.CountAsync();
 
@@ -40,6 +41,7 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
         var participant = await dbContext.Participants
             .AsNoTracking()
             .Include(p => p.Team)
+            .Include(p => p.ExternalConnections)
             .FirstOrDefaultAsync(p => p.Id == participantId && p.EventId == eventId)
             ?? throw new KeyNotFoundException($"Participant with id '{participantId}' not found in event '{eventId}'.");
 
@@ -51,6 +53,7 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
         var participant = await dbContext.Participants
             .AsNoTracking()
             .Include(p => p.Team)
+            .Include(p => p.ExternalConnections)
             .FirstOrDefaultAsync(p => p.UserId == userId && p.EventId == eventId)
             ?? throw new KeyNotFoundException("You are not registered for this event.");
 
@@ -67,12 +70,12 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             throw new InvalidOperationException("Cannot register for a Closed or Archived event.");
 
         var duplicateEmail = await dbContext.Participants
-            .AnyAsync(p => p.EventId == eventId && p.WorkEmail == request.WorkEmail);
+            .AnyAsync(p => p.EventId == eventId && p.WorkEmail == request.WorkEmail && p.Status == ParticipantStatus.Active);
         if (duplicateEmail)
             throw new ArgumentException("A participant with this email is already registered for this event.");
 
         var duplicateUser = await dbContext.Participants
-            .AnyAsync(p => p.EventId == eventId && p.UserId == userId);
+            .AnyAsync(p => p.EventId == eventId && p.UserId == userId && p.Status == ParticipantStatus.Active);
         if (duplicateUser)
             throw new ArgumentException("You are already registered for this event.");
 
@@ -118,9 +121,10 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             actor, "ParticipantCreated", "Participant", participant.Id.ToString(),
             eventId, null, JsonSerializer.Serialize(participant));
 
-        // Reload team nav property for DTO mapping
+        // Reload nav properties for DTO mapping
         if (participant.TeamId.HasValue)
             await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
+        await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();
 
         return MapToDto(participant);
     }
@@ -144,6 +148,7 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             eventId, before, JsonSerializer.Serialize(participant));
 
         await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
+        await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();
         return MapToDto(participant);
     }
 
@@ -166,6 +171,7 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             eventId, before, JsonSerializer.Serialize(participant));
 
         await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
+        await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();
         return MapToDto(participant);
     }
 
@@ -188,6 +194,7 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             eventId, before, JsonSerializer.Serialize(participant));
 
         await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
+        await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();
         return MapToDto(participant);
     }
 
@@ -220,7 +227,47 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
             eventId, before, JsonSerializer.Serialize(participant));
 
         await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
+        await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();
         return MapToDto(participant);
+    }
+
+    public async Task DeleteAsync(Guid eventId, Guid participantId, string actor)
+    {
+        var participant = await dbContext.Participants
+            .Include(p => p.ExternalConnections)
+            .FirstOrDefaultAsync(p => p.Id == participantId && p.EventId == eventId)
+            ?? throw new KeyNotFoundException($"Participant with id '{participantId}' not found in event '{eventId}'.");
+
+        var before = JsonSerializer.Serialize(participant);
+
+        // Remove related data
+        var activities = await dbContext.Activities
+            .Where(a => a.ParticipantId == participantId)
+            .ToListAsync();
+        dbContext.Activities.RemoveRange(activities);
+
+        var teamHistories = await dbContext.TeamHistories
+            .Where(th => th.ParticipantId == participantId)
+            .ToListAsync();
+        dbContext.TeamHistories.RemoveRange(teamHistories);
+
+        var badgeAwards = await dbContext.BadgeAwards
+            .Where(ba => ba.ParticipantId == participantId)
+            .ToListAsync();
+        dbContext.BadgeAwards.RemoveRange(badgeAwards);
+
+        if (participant.ExternalConnections?.Count > 0)
+        {
+            dbContext.ExternalConnections.RemoveRange(participant.ExternalConnections);
+        }
+
+        dbContext.Participants.Remove(participant);
+
+        await dbContext.SaveChangesAsync();
+
+        await auditService.LogAsync(
+            actor, "ParticipantDeleted", "Participant", participant.Id.ToString(),
+            eventId, before, null);
     }
 
     private async Task<Participant> GetTrackedParticipantAsync(Guid eventId, Guid participantId)
@@ -236,22 +283,31 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
         if (!exists) throw new KeyNotFoundException($"Event with id '{eventId}' not found.");
     }
 
-    private static ParticipantDto MapToDto(Participant p) => new()
+    private static ParticipantDto MapToDto(Participant p)
     {
-        Id = p.Id,
-        EventId = p.EventId,
-        UserId = p.UserId,
-        FirstName = p.FirstName,
-        LastName = p.LastName,
-        WorkEmail = p.WorkEmail,
-        DisplayName = p.DisplayName,
-        TeamId = p.TeamId,
-        TeamName = p.Team?.Name,
-        Status = p.Status,
-        JoinedAt = p.JoinedAt,
-        LeaderboardOptIn = p.LeaderboardOptIn,
-        StravaConsentGiven = p.StravaConsentGiven,
-        CreatedAt = p.CreatedAt,
-        UpdatedAt = p.UpdatedAt
-    };
+        var stravaConnection = p.ExternalConnections?
+            .FirstOrDefault(ec => ec.Provider == "Strava");
+
+        return new ParticipantDto
+        {
+            Id = p.Id,
+            EventId = p.EventId,
+            UserId = p.UserId,
+            FirstName = p.FirstName,
+            LastName = p.LastName,
+            WorkEmail = p.WorkEmail,
+            DisplayName = p.DisplayName,
+            TeamId = p.TeamId,
+            TeamName = p.Team?.Name,
+            Status = p.Status,
+            JoinedAt = p.JoinedAt,
+            LeaderboardOptIn = p.LeaderboardOptIn,
+            StravaConsentGiven = p.StravaConsentGiven,
+            StravaConnected = stravaConnection?.ConnectionStatus == ConnectionStatus.Connected,
+            StravaConnectionStatus = stravaConnection?.ConnectionStatus,
+            StravaLastSyncAt = stravaConnection?.LastSyncAt,
+            CreatedAt = p.CreatedAt,
+            UpdatedAt = p.UpdatedAt
+        };
+    }
 }
