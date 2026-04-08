@@ -37,7 +37,7 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
         if (ev.Status != EventStatus.Draft)
             throw new InvalidOperationException("Milestones can only be created when the event is in Draft status.");
 
-        await ValidateAscendingDistanceAsync(eventId, request.CumulativeDistanceKm, excludeId: null);
+        await ValidateAscendingDistanceAsync(eventId, request.OrderIndex, request.CumulativeDistanceKm, excludeId: null);
         await ValidateUniqueOrderIndexAsync(eventId, request.OrderIndex, excludeId: null);
 
         var milestone = new Milestone
@@ -56,7 +56,16 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
 
         await auditService.LogAsync(
             actor, "MilestoneCreated", "Milestone", milestone.Id.ToString(),
-            eventId, null, JsonSerializer.Serialize(milestone));
+            eventId, null, JsonSerializer.Serialize(new
+            {
+                milestone.Id,
+                milestone.EventId,
+                milestone.StopName,
+                milestone.OrderIndex,
+                milestone.CumulativeDistanceKm,
+                milestone.Description,
+                milestone.RewardText
+            }));
 
         return MapToDto(milestone);
     }
@@ -68,7 +77,16 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
             ?? throw new KeyNotFoundException($"Event with id '{eventId}' not found.");
 
         var milestone = await GetTrackedMilestoneAsync(eventId, milestoneId);
-        var before = JsonSerializer.Serialize(milestone);
+        var before = JsonSerializer.Serialize(new
+        {
+            milestone.Id,
+            milestone.EventId,
+            milestone.StopName,
+            milestone.OrderIndex,
+            milestone.CumulativeDistanceKm,
+            milestone.Description,
+            milestone.RewardText
+        });
 
         if (ev.Status != EventStatus.Draft)
         {
@@ -87,7 +105,7 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
         }
         else
         {
-            await ValidateAscendingDistanceAsync(eventId, request.CumulativeDistanceKm, excludeId: milestoneId);
+            await ValidateAscendingDistanceAsync(eventId, request.OrderIndex, request.CumulativeDistanceKm, excludeId: milestoneId);
             await ValidateUniqueOrderIndexAsync(eventId, request.OrderIndex, excludeId: milestoneId);
 
             milestone.StopName = request.StopName;
@@ -101,7 +119,16 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
 
         await auditService.LogAsync(
             actor, "MilestoneUpdated", "Milestone", milestone.Id.ToString(),
-            eventId, before, JsonSerializer.Serialize(milestone));
+            eventId, before, JsonSerializer.Serialize(new
+            {
+                milestone.Id,
+                milestone.EventId,
+                milestone.StopName,
+                milestone.OrderIndex,
+                milestone.CumulativeDistanceKm,
+                milestone.Description,
+                milestone.RewardText
+            }));
 
         return MapToDto(milestone);
     }
@@ -115,7 +142,14 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
             throw new InvalidOperationException("Milestones can only be deleted when the event is in Draft status.");
 
         var milestone = await GetTrackedMilestoneAsync(eventId, milestoneId);
-        var before = JsonSerializer.Serialize(milestone);
+        var before = JsonSerializer.Serialize(new
+        {
+            milestone.Id,
+            milestone.EventId,
+            milestone.StopName,
+            milestone.OrderIndex,
+            milestone.CumulativeDistanceKm
+        });
 
         dbContext.Milestones.Remove(milestone);
         await dbContext.SaveChangesAsync();
@@ -135,7 +169,15 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
         if (milestone.AnnouncementStatus == AnnouncementStatus.Announced)
             throw new InvalidOperationException("Milestone has already been announced.");
 
-        var before = JsonSerializer.Serialize(milestone);
+        var before = JsonSerializer.Serialize(new
+        {
+            milestone.Id,
+            milestone.EventId,
+            milestone.StopName,
+            milestone.OrderIndex,
+            milestone.CumulativeDistanceKm,
+            milestone.AnnouncementStatus
+        });
 
         milestone.AnnouncementStatus = AnnouncementStatus.Announced;
         milestone.AnnouncedBy = actor;
@@ -145,7 +187,17 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
 
         await auditService.LogAsync(
             actor, "MilestoneAnnounced", "Milestone", milestoneId.ToString(),
-            eventId, before, JsonSerializer.Serialize(milestone));
+            eventId, before, JsonSerializer.Serialize(new
+            {
+                milestone.Id,
+                milestone.EventId,
+                milestone.StopName,
+                milestone.OrderIndex,
+                milestone.CumulativeDistanceKm,
+                milestone.AnnouncementStatus,
+                milestone.AnnouncedAt,
+                milestone.AnnouncedBy
+            }));
 
         return MapToDto(milestone);
     }
@@ -163,16 +215,22 @@ public class MilestoneService(AppDbContext dbContext, IAuditService auditService
         if (!exists) throw new KeyNotFoundException($"Event with id '{eventId}' not found.");
     }
 
-    private async Task ValidateAscendingDistanceAsync(Guid eventId, decimal cumulativeKm, Guid? excludeId)
+    private async Task ValidateAscendingDistanceAsync(Guid eventId, int orderIndex, decimal cumulativeKm, Guid? excludeId)
     {
-        var existingDistances = await dbContext.Milestones
+        var existing = await dbContext.Milestones
             .AsNoTracking()
             .Where(m => m.EventId == eventId && (excludeId == null || m.Id != excludeId))
-            .Select(m => m.CumulativeDistanceKm)
+            .Select(m => new { m.OrderIndex, m.CumulativeDistanceKm })
             .ToListAsync();
 
-        if (existingDistances.Any(d => d == cumulativeKm))
+        if (existing.Any(m => m.CumulativeDistanceKm == cumulativeKm))
             throw new ArgumentException($"A milestone with cumulative distance {cumulativeKm} km already exists for this event.");
+
+        if (existing.Any(m => m.OrderIndex < orderIndex && m.CumulativeDistanceKm >= cumulativeKm))
+            throw new ArgumentException($"Cumulative distance {cumulativeKm} km must be greater than all milestones with a lower order index.");
+
+        if (existing.Any(m => m.OrderIndex > orderIndex && m.CumulativeDistanceKm <= cumulativeKm))
+            throw new ArgumentException($"Cumulative distance {cumulativeKm} km must be less than all milestones with a higher order index.");
     }
 
     private async Task ValidateUniqueOrderIndexAsync(Guid eventId, int orderIndex, Guid? excludeId)

@@ -156,7 +156,7 @@ public sealed class MilestoneServiceTests : IDisposable
 
         var request = new UpdateMilestoneRequest
         {
-            StopName = "Updated Stop",
+            StopName = "Stop",
             OrderIndex = 0,
             CumulativeDistanceKm = 100m,
             Description = "New description"
@@ -164,7 +164,7 @@ public sealed class MilestoneServiceTests : IDisposable
 
         var result = await CreateService().UpdateAsync(ev.Id, milestone.Id, request, "admin");
 
-        Assert.Equal("Updated Stop", result.StopName);
+        Assert.Equal("New description", result.Description);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────

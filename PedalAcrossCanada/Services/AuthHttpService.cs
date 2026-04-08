@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using PedalAcrossCanada.Auth;
 using PedalAcrossCanada.Shared.DTOs.Auth;
 
@@ -9,7 +10,7 @@ public class AuthHttpService(
     HttpClient httpClient,
     TokenService tokenService,
     JwtAuthStateProvider authStateProvider,
-    ParticipantStateService participantStateService)
+    IServiceProvider serviceProvider)
 {
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
@@ -53,7 +54,7 @@ public class AuthHttpService(
 
         await tokenService.ClearAllTokensAsync();
         authStateProvider.NotifyUserLoggedOut();
-        participantStateService.Clear();
+        serviceProvider.GetRequiredService<ParticipantStateService>().Clear();
     }
 
     public async Task<bool> TryRefreshAsync()

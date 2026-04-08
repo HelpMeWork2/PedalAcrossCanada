@@ -69,7 +69,10 @@ public class DashboardService(
             TotalEventKm = totalEventKm,
             RouteDistanceKm = ev.RouteDistanceKm,
             PercentComplete = Math.Min(percentComplete, 100m),
-            CurrentVirtualLocation = currentLocation,
+            TimesAroundRoute = ev.RouteDistanceKm > 0
+                ? (int)Math.Floor(totalEventKm / ev.RouteDistanceKm)
+                : 0,
+            NearestCity = currentLocation,
             RegisteredParticipants = registeredParticipants,
             ActiveParticipants = activeParticipants,
             TotalActivities = totalActivities,

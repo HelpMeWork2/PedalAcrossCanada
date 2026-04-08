@@ -73,6 +73,14 @@ else if (_dashboard is not null)
                 </div>
             </div>
         </div>
+        <div class="col-12 col-md">
+            <div class="card text-center h-100 border-danger border-2 shadow-sm">
+                <div class="card-body">
+                    <div class="display-6 text-danger fw-bold">@_dashboard.TimesAroundRoute×</div>
+                    <div class="text-muted small">Montréal → Calgary</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     @* Route Progress *@
@@ -87,10 +95,18 @@ else if (_dashboard is not null)
                 <span class="fw-semibold">@_dashboard.PercentComplete.ToString("N1")% complete</span>
                 <span>@_dashboard.RouteDistanceKm.ToString("N0") km total route</span>
             </div>
-            @if (_dashboard.CurrentVirtualLocation is not null)
+            @if (_dashboard.NearestCity is not null)
             {
                 <div class="mt-2 text-center text-muted small">
-                    📍 Currently near <strong>@_dashboard.CurrentVirtualLocation</strong>
+                    📍 Currently near <strong>@_dashboard.NearestCity</strong>
+                </div>
+            }
+            @if (_dashboard.TimesAroundRoute > 0)
+            {
+                <div class="mt-3 text-center">
+                    <span class="badge bg-danger px-4 py-2 fs-6">
+                        🚴 The team has collectively cycled Montréal → Calgary <strong>@_dashboard.TimesAroundRoute×</strong>!
+                    </span>
                 </div>
             }
             @if (_dashboard.NextMilestone is not null)

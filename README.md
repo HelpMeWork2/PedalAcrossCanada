@@ -2,6 +2,11 @@
 
 An internal company web app that tracks employee cycling kilometres during a company-wide biking initiative. Participants log rides manually or via Strava sync, and progress is measured against a virtual **Montreal-to-Calgary route (~3,757 km)**. The app supports milestone celebrations, leaderboards, badges, and admin reporting.
 
+## Screenshot
+
+![Pedal Across Canada](docs/screenshots/Screenshot%202026-04-08%20120949.png)
+
+
 ## Features
 
 - **Event management** — admins create challenge events with configurable date ranges, milestones, and rules

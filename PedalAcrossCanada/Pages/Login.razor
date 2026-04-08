@@ -3,82 +3,107 @@
 @inject AuthHttpService AuthHttpService
 @inject NavigationManager Navigation
 
-<PageTitle>Login - Pedal Across Canada</PageTitle>
+<PageTitle>Login – Pedal Across Canada</PageTitle>
 
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5">
-        <div class="card shadow">
-            <div class="card-body p-4">
-                <h3 class="card-title text-center mb-4">Pedal Across Canada</h3>
+<div class="login-page">
+    <div class="login-card-wrapper">
 
-                @if (!string.IsNullOrEmpty(_errorMessage))
-                {
-                    <div class="alert alert-danger" role="alert">@_errorMessage</div>
-                }
-
-                <ul class="nav nav-tabs mb-3" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @(_isLoginTab ? "active" : "")"
-                                type="button" @onclick="() => SwitchTab(true)">Login</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @(!_isLoginTab ? "active" : "")"
-                                type="button" @onclick="() => SwitchTab(false)">Register</button>
-                    </li>
-                </ul>
-
-                @if (_isLoginTab)
-                {
-                    <EditForm Model="_loginModel" OnValidSubmit="HandleLoginAsync" FormName="login">
-                        <DataAnnotationsValidator />
-                        <div class="mb-3">
-                            <label for="loginEmail" class="form-label">Email</label>
-                            <InputText id="loginEmail" class="form-control" @bind-Value="_loginModel.Email" />
-                            <ValidationMessage For="() => _loginModel.Email" />
-                        </div>
-                        <div class="mb-3">
-                            <label for="loginPassword" class="form-label">Password</label>
-                            <InputText id="loginPassword" type="password" class="form-control" @bind-Value="_loginModel.Password" />
-                            <ValidationMessage For="() => _loginModel.Password" />
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100" disabled="@_isLoading">
-                            @if (_isLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                            Sign In
-                        </button>
-                    </EditForm>
-                }
-                else
-                {
-                    <EditForm Model="_registerModel" OnValidSubmit="HandleRegisterAsync" FormName="register">
-                        <DataAnnotationsValidator />
-                        <div class="mb-3">
-                            <label for="regFirstName" class="form-label">First Name</label>
-                            <InputText id="regFirstName" class="form-control" @bind-Value="_registerModel.FirstName" />
-                            <ValidationMessage For="() => _registerModel.FirstName" />
-                        </div>
-                        <div class="mb-3">
-                            <label for="regLastName" class="form-label">Last Name</label>
-                            <InputText id="regLastName" class="form-control" @bind-Value="_registerModel.LastName" />
-                            <ValidationMessage For="() => _registerModel.LastName" />
-                        </div>
-                        <div class="mb-3">
-                            <label for="regEmail" class="form-label">Email</label>
-                            <InputText id="regEmail" class="form-control" @bind-Value="_registerModel.Email" />
-                            <ValidationMessage For="() => _registerModel.Email" />
-                        </div>
-                        <div class="mb-3">
-                            <label for="regPassword" class="form-label">Password</label>
-                            <InputText id="regPassword" type="password" class="form-control" @bind-Value="_registerModel.Password" />
-                            <ValidationMessage For="() => _registerModel.Password" />
-                        </div>
-                        <button type="submit" class="btn btn-success w-100" disabled="@_isLoading">
-                            @if (_isLoading) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                            Register
-                        </button>
-                    </EditForm>
-                }
+        @* Canadian hero banner *@
+        <div class="login-hero">
+            <div class="login-hero-maple" aria-hidden="true">🍁</div>
+            <h1 class="login-hero-title">Pedal Across Canada</h1>
+            <p class="login-hero-tagline">Company Cycling Challenge &mdash; Ride for Canada!</p>
+            <div class="login-hero-route" aria-label="Route: Montréal to Calgary, 3757 kilometres">
+                <span class="login-route-dot" aria-hidden="true"></span>
+                <span class="login-route-city">Montréal</span>
+                <div class="login-route-line" aria-hidden="true">
+                    <span class="login-route-bike" aria-hidden="true">🚴</span>
+                </div>
+                <span class="login-route-km">3,757 km</span>
+                <div class="login-route-line" aria-hidden="true"></div>
+                <span class="login-route-city">Calgary</span>
+                <span class="login-route-dot" aria-hidden="true"></span>
             </div>
         </div>
+
+        @* Form body *@
+        <div class="login-form-body">
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger" role="alert">@_errorMessage</div>
+            }
+
+            <ul class="nav nav-tabs login-tabs mb-4" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(_isLoginTab ? "active" : "")"
+                            type="button" @onclick="() => SwitchTab(true)">Sign In</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(!_isLoginTab ? "active" : "")"
+                            type="button" @onclick="() => SwitchTab(false)">Create Account</button>
+                </li>
+            </ul>
+
+            @if (_isLoginTab)
+            {
+                <EditForm Model="_loginModel" OnValidSubmit="HandleLoginAsync" FormName="login">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label for="loginEmail" class="form-label">Email address</label>
+                        <InputText id="loginEmail" class="form-control" @bind-Value="_loginModel.Email" autocomplete="username" />
+                        <ValidationMessage For="() => _loginModel.Email" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <InputText id="loginPassword" type="password" class="form-control" @bind-Value="_loginModel.Password" autocomplete="current-password" />
+                        <ValidationMessage For="() => _loginModel.Password" />
+                    </div>
+                    <button type="submit" class="btn btn-canada w-100 mt-1" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                        }
+                        Sign In
+                    </button>
+                </EditForm>
+            }
+            else
+            {
+                <EditForm Model="_registerModel" OnValidSubmit="HandleRegisterAsync" FormName="register">
+                    <DataAnnotationsValidator />
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label for="regFirstName" class="form-label">First name</label>
+                            <InputText id="regFirstName" class="form-control" @bind-Value="_registerModel.FirstName" autocomplete="given-name" />
+                            <ValidationMessage For="() => _registerModel.FirstName" />
+                        </div>
+                        <div class="col">
+                            <label for="regLastName" class="form-label">Last name</label>
+                            <InputText id="regLastName" class="form-control" @bind-Value="_registerModel.LastName" autocomplete="family-name" />
+                            <ValidationMessage For="() => _registerModel.LastName" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="regEmail" class="form-label">Work email</label>
+                        <InputText id="regEmail" class="form-control" @bind-Value="_registerModel.Email" autocomplete="username" />
+                        <ValidationMessage For="() => _registerModel.Email" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="regPassword" class="form-label">Password</label>
+                        <InputText id="regPassword" type="password" class="form-control" @bind-Value="_registerModel.Password" autocomplete="new-password" />
+                        <ValidationMessage For="() => _registerModel.Password" />
+                    </div>
+                    <button type="submit" class="btn btn-canada w-100 mt-1" disabled="@_isLoading">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                        }
+                        Join the Challenge 🍁
+                    </button>
+                </EditForm>
+            }
+        </div>
+
     </div>
 </div>
 

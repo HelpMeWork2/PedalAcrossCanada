@@ -119,7 +119,19 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
 
         await auditService.LogAsync(
             actor, "ParticipantCreated", "Participant", participant.Id.ToString(),
-            eventId, null, JsonSerializer.Serialize(participant));
+            eventId, null, JsonSerializer.Serialize(new
+            {
+                participant.Id,
+                participant.UserId,
+                participant.EventId,
+                participant.FirstName,
+                participant.LastName,
+                participant.WorkEmail,
+                participant.DisplayName,
+                participant.TeamId,
+                participant.Status,
+                participant.JoinedAt
+            }));
 
         // Reload nav properties for DTO mapping
         if (participant.TeamId.HasValue)
@@ -208,7 +220,14 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
         if (!teamExists)
             throw new KeyNotFoundException($"Team with id '{teamId}' not found in event '{eventId}'.");
 
-        var before = JsonSerializer.Serialize(participant);
+        var before = JsonSerializer.Serialize(new
+        {
+            participant.Id,
+            participant.UserId,
+            participant.EventId,
+            participant.TeamId,
+            participant.Status
+        });
 
         participant.TeamId = teamId;
         participant.UpdatedAt = DateTime.UtcNow;
@@ -224,7 +243,14 @@ public class ParticipantService(AppDbContext dbContext, IAuditService auditServi
 
         await auditService.LogAsync(
             actor, "ParticipantTeamChanged", "Participant", participant.Id.ToString(),
-            eventId, before, JsonSerializer.Serialize(participant));
+            eventId, before, JsonSerializer.Serialize(new
+            {
+                participant.Id,
+                participant.UserId,
+                participant.EventId,
+                participant.TeamId,
+                participant.Status
+            }));
 
         await dbContext.Entry(participant).Reference(p => p.Team).LoadAsync();
         await dbContext.Entry(participant).Collection(p => p.ExternalConnections).LoadAsync();

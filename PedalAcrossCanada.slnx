@@ -7,6 +7,9 @@
     <File Path="docs/04-ui-pages.md" />
     <File Path="docs/05-solution-architecture.md" />
     <File Path="docs/06-build-order.md" />
+    <File Path="docs/screenshots/Screenshot 2026-04-08 120530.png" />
+    <File Path="docs/screenshots/Screenshot 2026-04-08 120715.png" />
+    <File Path="docs/screenshots/Screenshot 2026-04-08 120949.png" />
     <File Path="README.md" />
   </Folder>
   <Project Path="PedalAcrossCanada.Server.Tests/PedalAcrossCanada.Server.Tests.csproj" />

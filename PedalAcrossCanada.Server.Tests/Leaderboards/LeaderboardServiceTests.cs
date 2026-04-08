@@ -193,7 +193,7 @@ public sealed class LeaderboardServiceTests : IDisposable
             FirstName = "Test",
             LastName = "Rider",
             WorkEmail = $"{Guid.NewGuid():N}@example.com",
-            DisplayName = $"Rider {Guid.NewGuid():N[..4]}",
+            DisplayName = $"Rider {Guid.NewGuid().ToString("N")[..4]}",
             Status = status,
             JoinedAt = joinedAt ?? DateTime.UtcNow,
             LeaderboardOptIn = optIn,

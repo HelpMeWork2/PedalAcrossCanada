@@ -73,8 +73,8 @@ public sealed class BadgeServiceTests : IDisposable
         var p = TestDataBuilder.CreateParticipant(ev.Id);
         setupCtx.Participants.Add(p);
 
-        var badge50 = BuildBadge(thresholdKm: 50m, name: "50 km Club");
-        var badge100 = BuildBadge(thresholdKm: 100m, name: "Century Rider");
+        var badge50 = BuildBadge(thresholdKm: 50m, name: "Test 50 km");
+        var badge100 = BuildBadge(thresholdKm: 100m, name: "Test 100 km");
         setupCtx.Badges.AddRange(badge50, badge100);
 
         setupCtx.Activities.Add(BuildApprovedActivity(ev.Id, p.Id, km: 150m));
@@ -84,21 +84,24 @@ public sealed class BadgeServiceTests : IDisposable
 
         await using var ctx = _dbFactory.CreateContext();
         var awardCount = await ctx.BadgeAwards
-            .CountAsync(ba => ba.ParticipantId == p.Id && ba.EventId == ev.Id);
+            .CountAsync(ba => ba.ParticipantId == p.Id
+                && ba.EventId == ev.Id
+                && (ba.BadgeId == badge50.Id || ba.BadgeId == badge100.Id));
         Assert.Equal(2, awardCount);
     }
 
     [Fact]
     public async Task CheckAndAwardBadgesAsync_CreatesNotificationForEachNewBadge()
     {
-        var (eventId, participantId, _) = await SeedAsync(thresholdKm: 50m, activityKm: 100m);
+        var (eventId, participantId, badgeId) = await SeedAsync(thresholdKm: 50m, activityKm: 100m);
 
         await CreateService().CheckAndAwardBadgesAsync(eventId, participantId, "system");
 
         await using var ctx = _dbFactory.CreateContext();
         var notificationCount = await ctx.Notifications
             .CountAsync(n => n.ParticipantId == participantId
-                             && n.NotificationType == NotificationType.BadgeEarned);
+                             && n.NotificationType == NotificationType.BadgeEarned
+                             && n.RelatedEntityId == badgeId.ToString());
         Assert.Equal(1, notificationCount);
     }
 

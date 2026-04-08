@@ -9,6 +9,8 @@
 
 .navbar-brand {
     font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .bi {
@@ -56,8 +58,9 @@
     }
 
 .nav-item ::deep a.active {
-    background-color: rgba(255,255,255,0.37);
+    background-color: rgba(255,255,255,0.22);
     color: white;
+    border-left: 3px solid #ffffff;
 }
 
 .nav-item ::deep a:hover {

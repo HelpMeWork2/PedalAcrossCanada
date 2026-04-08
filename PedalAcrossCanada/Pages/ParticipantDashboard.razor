@@ -41,6 +41,19 @@ else if (_dashboard is not null)
                         @_dashboard.EventTotalKm.ToString("N0") km of @_dashboard.RouteDistanceKm.ToString("N0") km
                         (@_dashboard.PercentComplete.ToString("N1")%)
                     </div>
+                    @{
+                        var timesAroundRoute = _dashboard.RouteDistanceKm > 0
+                            ? (int)Math.Floor(_dashboard.EventTotalKm / _dashboard.RouteDistanceKm)
+                            : 0;
+                    }
+                    @if (timesAroundRoute > 0)
+                    {
+                        <div class="mt-3 text-center">
+                            <span class="badge bg-danger px-4 py-2 fs-6">
+                                🚴 The team has collectively cycled Montréal → Calgary <strong>@timesAroundRoute×</strong>!
+                            </span>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
