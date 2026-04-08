@@ -38,6 +38,13 @@ public class ApiClient(
         return response;
     }
 
+    public async Task<byte[]> GetBytesAsync(string uri)
+    {
+        var response = await SendWithAuthAsync(HttpMethod.Get, uri);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
     private async Task<HttpResponseMessage> SendWithAuthAsync(HttpMethod method, string uri, object? content = null)
     {
         var request = CreateRequest(method, uri, content);

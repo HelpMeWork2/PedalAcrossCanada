@@ -92,6 +92,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStravaTokenService, StravaTokenService>();
         services.AddScoped<IStravaApiClient, StravaApiClient>();
         services.AddScoped<IStravaSyncService, StravaSyncService>();
+        services.AddScoped<ILeaderboardService, LeaderboardService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IMilestoneCalculationService, MilestoneCalculationService>();
+        services.AddScoped<IBadgeService, BadgeService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IReportService, ReportService>();
 
         return services;
     }

@@ -81,13 +81,13 @@ The server seeds default roles (Admin, Participant, TeamCaptain, ExecutiveViewer
 | 4 | Events + Milestones | ✅ Complete |
 | 5 | Teams + Participants | ✅ Complete |
 | 6 | Manual activity entry + approval | ✅ Complete |
-| 7 | Totals, leaderboards, dashboards | 🔲 Not started |
-| 8 | Badges + Notifications | 🔲 Not started |
-| 9 | Reporting + Audit log | 🔲 Not started |
+| 7 | Totals, leaderboards, dashboards | ✅ Complete |
+| 8 | Badges + Notifications | ✅ Complete |
+| 9 | Reporting + Audit log | ✅ Complete |
 | 10 | Strava scaffold | ✅ Complete |
-| 11 | Strava import + background jobs | ✅ Complete |
+| 11 | Strava import + background jobs | 🟡 In progress |
 | 12 | Duplicate detection | 🔲 Not started |
-| 13 | Executive view + polish | 🔲 Not started |
+| 13 | Executive view + polish | 🟡 In progress |
 
 See [`docs/06-build-order.md`](docs/06-build-order.md) for the full phased build plan.
 

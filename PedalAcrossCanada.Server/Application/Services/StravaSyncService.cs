@@ -12,6 +12,8 @@ public class StravaSyncService(
     IStravaTokenService stravaTokenService,
     IStravaApiClient stravaApiClient,
     IAuditService auditService,
+    IMilestoneCalculationService milestoneCalculationService,
+    IBadgeService badgeService,
     ILogger<StravaSyncService> logger) : IStravaSyncService
 {
     private static readonly HashSet<string> SupportedActivityTypes = ["Ride", "VirtualRide", "EBikeRide"];
@@ -168,6 +170,12 @@ public class StravaSyncService(
 
             await dbContext.SaveChangesAsync();
 
+            if (result.ImportedCount > 0)
+            {
+                await milestoneCalculationService.RecalculateMilestonesAsync(participant.EventId);
+                await badgeService.CheckAndAwardBadgesAsync(participant.EventId, participantId, "strava-sync");
+            }
+
             // Update last sync timestamp
             var conn = await dbContext.ExternalConnections
                 .FirstOrDefaultAsync(ec => ec.ParticipantId == participantId && ec.Provider == "Strava");
@@ -276,7 +284,8 @@ public class StravaSyncService(
         if (!ev.StravaEnabled)
             throw new InvalidOperationException("Strava integration is not enabled for this event.");
 
-        var result = new ClubActivitySyncResultDto();
+            var result = new ClubActivitySyncResultDto();
+            var affectedParticipantIds = new HashSet<Guid>();
 
         try
         {
@@ -390,10 +399,20 @@ public class StravaSyncService(
 
                 dbContext.Activities.Add(activity);
                 existingExternalIds.Add(compositeKey);
+                affectedParticipantIds.Add(participantId);
                 result.ImportedCount++;
             }
 
             await dbContext.SaveChangesAsync();
+
+            if (affectedParticipantIds.Count > 0)
+            {
+                await milestoneCalculationService.RecalculateMilestonesAsync(eventId);
+                foreach (var pid in affectedParticipantIds)
+                {
+                    await badgeService.CheckAndAwardBadgesAsync(eventId, pid, "strava-club-sync");
+                }
+            }
 
             await auditService.LogAsync(
                 actor,

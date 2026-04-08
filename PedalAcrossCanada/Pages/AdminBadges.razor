@@ -1,0 +1,250 @@
+@page "/admin/badges"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@inject BadgeHttpService BadgeService
+@inject ParticipantHttpService ParticipantService
+@inject EventHttpService EventService
+
+<PageTitle>Badge Management - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Badge Management</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading badges..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found.</div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Badges for <em>@_activeEvent.Name</em></h5>
+        <button class="btn btn-primary btn-sm" @onclick="OpenGrantModal">
+            🏅 Grant Honorary Badge
+        </button>
+    </div>
+
+    @if (_badges.Count == 0)
+    {
+        <div class="alert alert-info">No badges defined for this event.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Badge</th>
+                        <th>Description</th>
+                        <th class="text-end">Threshold (km)</th>
+                        <th>Type</th>
+                        <th class="text-center">Active</th>
+                        <th class="text-end">Awards</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var badge in _badges.OrderBy(b => b.ThresholdKm))
+                    {
+                        <tr>
+                            <td class="fw-semibold">🏅 @badge.Name</td>
+                            <td class="text-muted small">@badge.Description</td>
+                            <td class="text-end">@badge.ThresholdKm km</td>
+                            <td>
+                                @if (badge.IsDefault)
+                                {
+                                    <span class="badge bg-secondary">Default</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-info text-dark">Custom</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (badge.IsActive)
+                                {
+                                    <span class="badge bg-success">Yes</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">No</span>
+                                }
+                            </td>
+                            <td class="text-end fw-bold">@badge.AwardCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@if (_grantModalOpen && _activeEvent is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Grant Honorary Badge</h5>
+                    <button type="button" class="btn-close" @onclick="CloseGrantModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_grantError is not null)
+                    {
+                        <div class="alert alert-danger">@_grantError</div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label">Badge</label>
+                        <select class="form-select" @bind="_selectedBadgeId">
+                            <option value="">-- Select a badge --</option>
+                            @foreach (var badge in _badges.OrderBy(b => b.ThresholdKm))
+                            {
+                                <option value="@badge.Id">@badge.Name (@badge.ThresholdKm km)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Participant</label>
+                        @if (_participantsLoading)
+                        {
+                            <div class="text-muted small">Loading participants...</div>
+                        }
+                        else
+                        {
+                            <select class="form-select" @bind="_selectedParticipantId">
+                                <option value="">-- Select a participant --</option>
+                                @foreach (var p in _participants)
+                                {
+                                    <option value="@p.Id">@p.DisplayName</option>
+                                }
+                            </select>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseGrantModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="GrantBadgeAsync" disabled="@_granting">
+                        @if (_granting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Grant Badge
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Toast? _toast;
+    private bool _isLoading = true;
+    private EventDto? _activeEvent;
+    private List<BadgeDto> _badges = [];
+    private List<ParticipantDto> _participants = [];
+
+    private bool _grantModalOpen;
+    private bool _participantsLoading;
+    private bool _granting;
+    private Guid _selectedBadgeId;
+    private Guid _selectedParticipantId;
+    private string? _grantError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                var result = await BadgeService.GetAllForEventAsync(_activeEvent.Id);
+                _badges = result?.ToList() ?? [];
+            }
+        }
+        catch (Exception ex)
+        {
+            _toast?.ShowError($"Failed to load badges: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OpenGrantModal()
+    {
+        _selectedBadgeId = Guid.Empty;
+        _selectedParticipantId = Guid.Empty;
+        _grantError = null;
+        _grantModalOpen = true;
+
+        if (_participants.Count == 0 && _activeEvent is not null)
+        {
+            _participantsLoading = true;
+            try
+            {
+                var paged = await ParticipantService.GetAllAsync(_activeEvent.Id, pageSize: 500);
+                _participants = paged?.Data?.OrderBy(p => p.DisplayName).ToList() ?? [];
+            }
+            catch
+            {
+                _participants = [];
+            }
+            finally
+            {
+                _participantsLoading = false;
+            }
+        }
+    }
+
+    private void CloseGrantModal()
+    {
+        _grantModalOpen = false;
+        _grantError = null;
+    }
+
+    private async Task GrantBadgeAsync()
+    {
+        if (_selectedBadgeId == Guid.Empty || _selectedParticipantId == Guid.Empty || _activeEvent is null)
+        {
+            _grantError = "Please select both a badge and a participant.";
+            return;
+        }
+
+        _granting = true;
+        _grantError = null;
+
+        try
+        {
+            var response = await BadgeService.GrantBadgeAsync(
+                _activeEvent.Id,
+                _selectedBadgeId,
+                new GrantBadgeRequest { ParticipantId = _selectedParticipantId });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _grantModalOpen = false;
+                _toast?.ShowSuccess("Badge granted successfully.");
+
+                // Refresh badge award counts
+                var result = await BadgeService.GetAllForEventAsync(_activeEvent.Id);
+                _badges = result?.ToList() ?? [];
+            }
+            else
+            {
+                var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                _grantError = problem.TryGetProperty("detail", out var d) ? d.GetString() : "Failed to grant badge.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _grantError = ex.Message;
+        }
+        finally
+        {
+            _granting = false;
+        }
+    }
+}

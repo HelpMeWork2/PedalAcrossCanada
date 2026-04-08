@@ -1,4 +1,6 @@
 using PedalAcrossCanada.Server.Application.Interfaces;
+using PedalAcrossCanada.Shared.Common;
+using PedalAcrossCanada.Shared.DTOs.Audit;
 
 namespace PedalAcrossCanada.Server.Tests.Fakes;
 
@@ -20,6 +22,18 @@ public sealed class FakeAuditService : IAuditService
     {
         Entries.Add(new AuditEntry(actor, action, entityType, entityId, eventId, beforeSummary, afterSummary));
         return Task.CompletedTask;
+    }
+
+    public Task<PagedResult<AuditLogDto>> GetPagedAsync(
+        string? entityType = null,
+        string? entityId = null,
+        string? actor = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        int page = 1,
+        int pageSize = 25)
+    {
+        return Task.FromResult(PagedResult<AuditLogDto>.Empty(page, pageSize));
     }
 
     public record AuditEntry(

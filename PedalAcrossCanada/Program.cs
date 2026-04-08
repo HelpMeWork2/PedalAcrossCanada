@@ -30,5 +30,11 @@ builder.Services.AddScoped<TeamHttpService>();
 builder.Services.AddScoped<ParticipantHttpService>();
 builder.Services.AddScoped<ActivityHttpService>();
 builder.Services.AddScoped<StravaHttpService>();
+builder.Services.AddScoped<LeaderboardHttpService>();
+builder.Services.AddScoped<DashboardHttpService>();
+builder.Services.AddScoped<BadgeHttpService>();
+builder.Services.AddScoped<NotificationHttpService>();
+builder.Services.AddScoped<ReportHttpService>();
+builder.Services.AddScoped<AuditHttpService>();
 
 await builder.Build().RunAsync();

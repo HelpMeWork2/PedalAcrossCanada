@@ -1,0 +1,37 @@
+@* Renders a Bootstrap progress bar for route completion *@
+
+<div class="progress mb-1" style="height: 28px;">
+    <div class="progress-bar bg-success progress-bar-striped @(Animated ? "progress-bar-animated" : "")"
+         role="progressbar"
+         style="width: @_clampedPercent%;"
+         aria-valuenow="@_clampedPercent"
+         aria-valuemin="0"
+         aria-valuemax="100">
+        @_clampedPercent.ToString("N1")%
+    </div>
+</div>
+<div class="d-flex justify-content-between small text-muted">
+    <span>@StartLabel</span>
+    @if (!string.IsNullOrWhiteSpace(CurrentLocation))
+    {
+        <span class="fw-semibold text-success">📍 @CurrentLocation</span>
+    }
+    <span>@EndLabel (@RouteDistanceKm.ToString("N0") km)</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public decimal TotalKm { get; set; }
+    [Parameter, EditorRequired] public decimal RouteDistanceKm { get; set; }
+    [Parameter] public decimal PercentComplete { get; set; }
+    [Parameter] public string? CurrentLocation { get; set; }
+    [Parameter] public string StartLabel { get; set; } = "Montreal";
+    [Parameter] public string EndLabel { get; set; } = "Calgary";
+    [Parameter] public bool Animated { get; set; } = true;
+
+    private decimal _clampedPercent;
+
+    protected override void OnParametersSet()
+    {
+        _clampedPercent = Math.Min(Math.Max(PercentComplete, 0m), 100m);
+    }
+}

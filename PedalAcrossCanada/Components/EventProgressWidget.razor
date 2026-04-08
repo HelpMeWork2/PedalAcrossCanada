@@ -1,0 +1,53 @@
+@* Displays event-level progress: total km, participants, activities, next milestone *@
+@using PedalAcrossCanada.Shared.DTOs.Dashboards
+
+<div class="card h-100">
+    <div class="card-header fw-semibold">🚴 Event Progress</div>
+    <div class="card-body">
+        <div class="mb-3">
+            <RouteProgressBar TotalKm="Dashboard.TotalEventKm"
+                              RouteDistanceKm="Dashboard.RouteDistanceKm"
+                              PercentComplete="Dashboard.PercentComplete"
+                              CurrentLocation="Dashboard.CurrentVirtualLocation" />
+        </div>
+
+        <div class="row row-cols-2 row-cols-md-4 g-3 text-center mb-3">
+            <div class="col">
+                <div class="fw-bold fs-5 text-success">@Dashboard.TotalEventKm.ToString("N0")</div>
+                <div class="small text-muted">Total km</div>
+            </div>
+            <div class="col">
+                <div class="fw-bold fs-5">@Dashboard.ActiveParticipants</div>
+                <div class="small text-muted">Cyclists</div>
+            </div>
+            <div class="col">
+                <div class="fw-bold fs-5">@Dashboard.TotalActivities</div>
+                <div class="small text-muted">Rides</div>
+            </div>
+            <div class="col">
+                <div class="fw-bold fs-5 text-warning">@Dashboard.CompletedMilestones.Count</div>
+                <div class="small text-muted">Milestones</div>
+            </div>
+        </div>
+
+        @if (Dashboard.NextMilestone is not null)
+        {
+            var kmRemaining = Dashboard.NextMilestone.CumulativeDistanceKm - Dashboard.TotalEventKm;
+            <div class="alert alert-info mb-0 py-2 small">
+                <strong>Next stop:</strong> @Dashboard.NextMilestone.StopName
+                (@Dashboard.NextMilestone.CumulativeDistanceKm.ToString("N0") km)
+                — @Math.Max(0, kmRemaining).ToString("N0") km to go
+            </div>
+        }
+        else if (Dashboard.PercentComplete >= 100m)
+        {
+            <div class="alert alert-success mb-0 py-2 small">
+                🎉 Route complete! We made it to Calgary!
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EventDashboardDto Dashboard { get; set; } = default!;
+}

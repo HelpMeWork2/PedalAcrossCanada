@@ -1,0 +1,59 @@
+@* Full team leaderboard table (not paginated) *@
+@using PedalAcrossCanada.Shared.DTOs.Leaderboards
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th style="width: 60px;">Rank</th>
+                <th>Team</th>
+                <th class="text-end">Total km</th>
+                <th class="text-end">Avg km / rider</th>
+                <th class="text-end">Riders</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Entries.Count == 0)
+            {
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-3">No teams on the leaderboard yet.</td>
+                </tr>
+            }
+            else
+            {
+                @foreach (var entry in Entries)
+                {
+                    <tr class="@(entry.TeamId == HighlightTeamId ? "table-warning fw-semibold" : "")">
+                        <td>
+                            @if (entry.Rank == 1)
+                            {
+                                <span title="1st">🥇</span>
+                            }
+                            else if (entry.Rank == 2)
+                            {
+                                <span title="2nd">🥈</span>
+                            }
+                            else if (entry.Rank == 3)
+                            {
+                                <span title="3rd">🥉</span>
+                            }
+                            else
+                            {
+                                @entry.Rank
+                            }
+                        </td>
+                        <td>@entry.TeamName</td>
+                        <td class="text-end">@entry.TotalKm.ToString("N2")</td>
+                        <td class="text-end">@entry.AverageKmPerParticipant.ToString("N2")</td>
+                        <td class="text-end">@entry.ActiveParticipants</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TeamLeaderboardEntry> Entries { get; set; } = [];
+    [Parameter] public Guid? HighlightTeamId { get; set; }
+}

@@ -1,0 +1,197 @@
+@page "/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject DashboardHttpService DashboardService
+@inject EventHttpService EventService
+@inject ParticipantHttpService ParticipantService
+
+<PageTitle>My Dashboard - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">My Dashboard</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading your dashboard..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found. Please check back later.</div>
+}
+else if (_notRegistered)
+{
+    <div class="alert alert-info">
+        You are not registered for the current event.
+        <a href="join" class="alert-link">Join now</a> to track your progress.
+    </div>
+}
+else if (_dashboard is not null)
+{
+    <EventStatusBanner Event="_activeEvent" />
+
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header fw-semibold">🗺️ Route Progress</div>
+                <div class="card-body">
+                    <RouteProgressBar TotalKm="_dashboard.EventTotalKm"
+                                      RouteDistanceKm="_dashboard.RouteDistanceKm"
+                                      PercentComplete="_dashboard.PercentComplete" />
+                    <div class="mt-2 small text-muted text-end">
+                        @_dashboard.EventTotalKm.ToString("N0") km of @_dashboard.RouteDistanceKm.ToString("N0") km
+                        (@_dashboard.PercentComplete.ToString("N1")%)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="display-6 text-primary fw-bold">@_dashboard.PersonalTotalKm.ToString("N2")</div>
+                    <div class="text-muted">My km</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="display-6 fw-bold">@_dashboard.PersonalRideCount</div>
+                    <div class="text-muted">My rides</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="display-6 text-success fw-bold">
+                        @(_dashboard.PersonalRank.HasValue ? $"#{_dashboard.PersonalRank}" : "—")
+                    </div>
+                    <div class="text-muted">My rank</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    @if (_dashboard.KmToNextMilestone.HasValue && _dashboard.NextMilestoneName is not null)
+                    {
+                        <div class="display-6 text-warning fw-bold">
+                            @_dashboard.KmToNextMilestone.Value.ToString("N0")
+                        </div>
+                        <div class="text-muted small">km to <strong>@_dashboard.NextMilestoneName</strong></div>
+                    }
+                    else
+                    {
+                        <div class="display-6 fw-bold">🎉</div>
+                        <div class="text-muted small">All milestones reached!</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_dashboard.TeamTotalKm > 0 || _dashboard.TeamRank.HasValue)
+    {
+        <div class="row g-4 mb-4">
+            <div class="col-md-6">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="fs-4 fw-bold text-info">@_dashboard.TeamTotalKm.ToString("N2")</div>
+                        <div class="text-muted">Team total km</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="fs-4 fw-bold text-info">
+                            @(_dashboard.TeamRank.HasValue ? $"#{_dashboard.TeamRank}" : "—")
+                        </div>
+                        <div class="text-muted">Team rank</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_dashboard.RecentActivities.Count > 0)
+    {
+        <div class="card">
+            <div class="card-header fw-semibold">🚴 Recent Rides</div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Distance</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var activity in _dashboard.RecentActivities)
+                        {
+                            <tr>
+                                <td>@activity.ActivityDate.ToString("MMM d, yyyy")</td>
+                                <td>@activity.DistanceKm.ToString("N2") km</td>
+                                <td class="text-muted small">@activity.RideType</td>
+                                <td>
+                                    <span class="badge @GetStatusBadge(activity.Status)">
+                                        @activity.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer small">
+                <a href="activities">View all my activities →</a>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private Toast _toast = default!;
+    private bool _isLoading = true;
+    private bool _notRegistered;
+    private EventDto? _activeEvent;
+    private ParticipantDashboardDto? _dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                _dashboard = await DashboardService.GetMyDashboardAsync(_activeEvent.Id);
+            }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _notRegistered = true;
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load dashboard: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string GetStatusBadge(PedalAcrossCanada.Shared.Enums.ActivityStatus status) =>
+        status switch
+        {
+            PedalAcrossCanada.Shared.Enums.ActivityStatus.Approved => "bg-success",
+            PedalAcrossCanada.Shared.Enums.ActivityStatus.Rejected => "bg-danger",
+            PedalAcrossCanada.Shared.Enums.ActivityStatus.Pending => "bg-warning text-dark",
+            _ => "bg-secondary"
+        };
+}

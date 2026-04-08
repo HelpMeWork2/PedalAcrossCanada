@@ -14,6 +14,8 @@ public sealed class StravaSyncServiceTests : IDisposable
     private readonly FakeAuditService _auditService;
     private readonly FakeTokenEncryptionService _encryptionService;
     private readonly FakeStravaApiClient _stravaApiClient;
+    private readonly FakeMilestoneCalculationService _milestoneCalculationService = new();
+    private readonly FakeBadgeService _badgeService = new();
     private readonly NullLogger<StravaSyncService> _logger = new();
 
     public StravaSyncServiceTests()
@@ -40,7 +42,8 @@ public sealed class StravaSyncServiceTests : IDisposable
                 RedirectUri = "https://localhost/callback"
             }));
 
-        return new StravaSyncService(ctx, tokenService, _stravaApiClient, _auditService, _logger);
+        return new StravaSyncService(ctx, tokenService, _stravaApiClient, _auditService,
+            _milestoneCalculationService, _badgeService, _logger);
     }
 
     private StravaTokenData CreateValidTokenData(long? expiresAt = null)

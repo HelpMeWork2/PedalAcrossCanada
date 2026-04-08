@@ -1,0 +1,180 @@
+@page "/leaderboards"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject LeaderboardHttpService LeaderboardService
+@inject EventHttpService EventService
+@inject ParticipantHttpService ParticipantService
+
+<PageTitle>Leaderboards - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Leaderboards</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading leaderboards..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found.</div>
+}
+else
+{
+    <EventStatusBanner Event="_activeEvent" />
+
+    <ul class="nav nav-tabs mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(_activeTab == Tab.Individual ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(Tab.Individual)">
+                🏅 Individual
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_activeTab == Tab.Team ? "active" : "")"
+                    @onclick="() => SwitchTabAsync(Tab.Team)">
+                🏆 Teams
+            </button>
+        </li>
+    </ul>
+
+    @if (_tabLoading)
+    {
+        <LoadingSpinner Message="Loading..." />
+    }
+    else if (_activeTab == Tab.Individual)
+    {
+        @if (_individualResult is null || _individualResult.Data.Count == 0)
+        {
+            <div class="alert alert-info">No cyclists on the leaderboard yet.</div>
+        }
+        else
+        {
+            <IndividualLeaderboardTable Entries="_individualResult.Data"
+                                       HighlightParticipantId="_myParticipantId"
+                                       CurrentPage="_individualPage"
+                                       PageSize="_individualPageSize"
+                                       TotalCount="_individualResult.TotalCount"
+                                       OnPageChange="OnIndividualPageChangeAsync" />
+        }
+    }
+    else
+    {
+        @if (_teamEntries is null || _teamEntries.Count == 0)
+        {
+            <div class="alert alert-info">No teams on the leaderboard yet.</div>
+        }
+        else
+        {
+            <TeamLeaderboardTable Entries="_teamEntries" HighlightTeamId="_myTeamId" />
+        }
+    }
+}
+
+@code {
+    private enum Tab { Individual, Team }
+
+    private Toast _toast = default!;
+    private bool _isLoading = true;
+    private bool _tabLoading;
+    private EventDto? _activeEvent;
+    private Tab _activeTab = Tab.Individual;
+
+    private PedalAcrossCanada.Shared.Common.PagedResult<IndividualLeaderboardEntry>? _individualResult;
+    private IReadOnlyList<TeamLeaderboardEntry>? _teamEntries;
+
+    private int _individualPage = 1;
+    private const int _individualPageSize = 25;
+
+    private Guid? _myParticipantId;
+    private Guid? _myTeamId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                await LoadMyParticipantAsync();
+                await LoadIndividualAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load leaderboards: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadMyParticipantAsync()
+    {
+        try
+        {
+            var me = await ParticipantService.GetMeAsync(_activeEvent!.Id);
+            if (me is not null)
+            {
+                _myParticipantId = me.Id;
+                _myTeamId = me.TeamId;
+            }
+        }
+        catch
+        {
+            // not yet registered — no highlight needed
+        }
+    }
+
+    private async Task SwitchTabAsync(Tab tab)
+    {
+        if (_activeTab == tab) return;
+        _activeTab = tab;
+
+        if (tab == Tab.Individual && _individualResult is null)
+        {
+            _tabLoading = true;
+            await LoadIndividualAsync();
+            _tabLoading = false;
+        }
+        else if (tab == Tab.Team && _teamEntries is null)
+        {
+            _tabLoading = true;
+            await LoadTeamsAsync();
+            _tabLoading = false;
+        }
+    }
+
+    private async Task LoadIndividualAsync()
+    {
+        try
+        {
+            _individualResult = await LeaderboardService.GetIndividualAsync(
+                _activeEvent!.Id, _individualPage, _individualPageSize);
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load individual leaderboard: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTeamsAsync()
+    {
+        try
+        {
+            _teamEntries = await LeaderboardService.GetTeamsAsync(_activeEvent!.Id);
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load team leaderboard: {ex.Message}");
+        }
+    }
+
+    private async Task OnIndividualPageChangeAsync(int page)
+    {
+        _individualPage = page;
+        _tabLoading = true;
+        await LoadIndividualAsync();
+        _tabLoading = false;
+    }
+}

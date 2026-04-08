@@ -1,7 +1,119 @@
 ﻿@page "/"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject DashboardHttpService DashboardService
+@inject LeaderboardHttpService LeaderboardService
+@inject EventHttpService EventService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Home - Pedal Across Canada</PageTitle>
 
-<h1>Hello, world!</h1>
+<Toast @ref="_toast" />
 
-Welcome to your new app.
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading event home..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="text-center py-5">
+        <h2 class="mb-3">🚴 Welcome to Pedal Across Canada</h2>
+        <p class="text-muted">No active event at this time. Check back soon!</p>
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">@_activeEvent.Name</h3>
+        <EventStatusBanner Event="_activeEvent" />
+    </div>
+
+    @if (_eventDashboard is not null)
+    {
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <EventProgressWidget Dashboard="_eventDashboard" />
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+        @if (_topIndividuals is not null && _topIndividuals.Count > 0)
+        {
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">🏅 Top Cyclists</span>
+                        <a href="leaderboards" class="btn btn-sm btn-outline-primary">Full leaderboard →</a>
+                    </div>
+                    <div class="card-body p-0">
+                        <IndividualLeaderboardTable Entries="_topIndividuals"
+                                                   TotalCount="_topIndividuals.Count"
+                                                   PageSize="_topIndividuals.Count" />
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_topTeams is not null && _topTeams.Count > 0)
+        {
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">🏆 Top Teams</span>
+                        <a href="leaderboards" class="btn btn-sm btn-outline-primary">Full leaderboard →</a>
+                    </div>
+                    <div class="card-body p-0">
+                        <TeamLeaderboardTable Entries="_topTeams" />
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (_topIndividuals is null && _topTeams is null)
+    {
+        <div class="alert alert-info mt-4">
+            No ride data yet. Be the first to
+            <a href="activities" class="alert-link">log a ride</a>!
+        </div>
+    }
+}
+
+@code {
+    private Toast _toast = default!;
+    private bool _isLoading = true;
+    private EventDto? _activeEvent;
+    private EventDashboardDto? _eventDashboard;
+    private IReadOnlyList<IndividualLeaderboardEntry>? _topIndividuals;
+    private IReadOnlyList<TeamLeaderboardEntry>? _topTeams;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                var dashboardTask = DashboardService.GetEventDashboardAsync(_activeEvent.Id);
+                var individualTask = LeaderboardService.GetIndividualAsync(_activeEvent.Id, page: 1, pageSize: 5);
+                var teamTask = LeaderboardService.GetTeamsAsync(_activeEvent.Id);
+
+                await Task.WhenAll(dashboardTask, individualTask, teamTask);
+
+                _eventDashboard = await dashboardTask;
+                var individualResult = await individualTask;
+                _topIndividuals = individualResult?.Data;
+                var allTeams = await teamTask;
+                _topTeams = allTeams?.Take(5).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _toast.ShowError($"Failed to load home page: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
+

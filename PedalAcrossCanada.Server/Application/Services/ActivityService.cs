@@ -9,7 +9,11 @@ using PedalAcrossCanada.Shared.Enums;
 
 namespace PedalAcrossCanada.Server.Application.Services;
 
-public class ActivityService(AppDbContext dbContext, IAuditService auditService) : IActivityService
+public class ActivityService(
+    AppDbContext dbContext,
+    IAuditService auditService,
+    IMilestoneCalculationService milestoneCalculationService,
+    IBadgeService badgeService) : IActivityService
 {
     public async Task<PagedResult<ActivityDto>> GetAllAsync(
         Guid eventId,
@@ -293,6 +297,9 @@ public class ActivityService(AppDbContext dbContext, IAuditService auditService)
         activity.UpdatedAt = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync();
+
+        await milestoneCalculationService.RecalculateMilestonesAsync(activity.EventId);
+        await badgeService.CheckAndAwardBadgesAsync(activity.EventId, activity.ParticipantId, actor);
 
         await auditService.LogAsync(
             actor, "ActivityApproved", "Activity", activityId.ToString(),

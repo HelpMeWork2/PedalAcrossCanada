@@ -1,0 +1,81 @@
+@inject NotificationHttpService NotificationService
+
+@if (_loading)
+{
+    <div class="text-center py-3">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+    </div>
+}
+else if (_notifications.Count == 0)
+{
+    <div class="text-muted text-center py-3 px-3 small">No notifications yet.</div>
+}
+else
+{
+    <ul class="list-group list-group-flush notification-list">
+        @foreach (var n in _notifications)
+        {
+            <li class="list-group-item list-group-item-action px-3 py-2 @(n.IsRead ? "" : "fw-semibold bg-light")"
+                @onclick="() => MarkReadAsync(n)">
+                <div class="d-flex align-items-start gap-2">
+                    <span class="fs-5 mt-1">@GetIcon(n.NotificationType)</span>
+                    <div class="flex-grow-1 overflow-hidden">
+                        <div class="small text-truncate">@n.Title</div>
+                        <div class="text-muted small text-truncate">@n.Message</div>
+                        <div class="text-muted" style="font-size:0.7rem">@n.CreatedAt.ToString("MMM d, h:mm tt")</div>
+                    </div>
+                    @if (!n.IsRead)
+                    {
+                        <span class="badge rounded-pill bg-primary align-self-center" style="font-size:0.6rem">New</span>
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<NotificationDto> _notifications = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await NotificationService.GetNotificationsAsync(pageSize: 20);
+            _notifications = result?.Data?.ToList() ?? [];
+        }
+        catch
+        {
+            _notifications = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task MarkReadAsync(NotificationDto notification)
+    {
+        if (notification.IsRead) return;
+        notification.IsRead = true;
+        await NotificationService.MarkAsReadAsync(notification.Id);
+    }
+
+    private static string GetIcon(NotificationType type) => type switch
+    {
+        NotificationType.ActivityRejected => "❌",
+        NotificationType.BadgeEarned      => "🏅",
+        NotificationType.MilestoneReached => "🎉",
+        NotificationType.StravaSyncFailed => "⚠️",
+        NotificationType.PendingApproval  => "⏳",
+        NotificationType.DuplicateFlag    => "🔁",
+        _                                 => "🔔"
+    };
+}

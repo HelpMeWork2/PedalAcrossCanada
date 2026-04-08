@@ -1,0 +1,260 @@
+@page "/admin/reports"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,ExecutiveViewer")]
+@inject ReportHttpService ReportService
+@inject EventHttpService EventService
+@inject TeamHttpService TeamService
+@inject IJSRuntime JS
+
+<PageTitle>Reports - Pedal Across Canada</PageTitle>
+
+<h3 class="mb-4">Reports &amp; Exports</h3>
+
+<Toast @ref="_toast" />
+
+@if (_isLoading)
+{
+    <LoadingSpinner Message="Loading..." />
+}
+else if (_activeEvent is null)
+{
+    <div class="alert alert-warning">No active event found. Reports require an active event.</div>
+}
+else
+{
+    <div class="alert alert-info mb-4">
+        Reports are generated for event: <strong>@_activeEvent.Name</strong>
+    </div>
+
+    <div class="row g-4">
+
+        @* Shared date-range filter card *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Shared Filters</h6>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" class="form-control" @bind="_startDate" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">End Date</label>
+                            <input type="date" class="form-control" @bind="_endDate" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Team</label>
+                            <select class="form-select" @bind="_teamId">
+                                <option value="">All Teams</option>
+                                @foreach (var team in _teams)
+                                {
+                                    <option value="@team.Id">@team.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-outline-secondary" @onclick="ClearFilters">Clear Filters</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Participants *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">👥 Participants</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Full participant list with team, status, total km, and ride count. Filtered by join date range and team.
+                    </p>
+                    <button class="btn btn-primary mt-auto @(_downloading == "participants" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("participants", "participants")'>
+                        @if (_downloading == "participants")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Activities *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">🚲 Activities</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        All activity records with source, status, approval metadata, and distance. Filtered by date, team, or participant.
+                    </p>
+                    <button class="btn btn-primary mt-auto @(_downloading == "activities" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("activities", "activities")'>
+                        @if (_downloading == "activities")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Team Totals *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">🏆 Team Totals</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Per-team aggregate km, active and total participant counts, and average km per rider.
+                    </p>
+                    <button class="btn btn-primary mt-auto @(_downloading == "teams" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("teams", "team-totals")'>
+                        @if (_downloading == "teams")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Milestones *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">📍 Milestone Achievements</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        All milestones for the event with achievement date, threshold, and announcement status.
+                    </p>
+                    <button class="btn btn-primary mt-auto @(_downloading == "milestones" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("milestones", "milestones")'>
+                        @if (_downloading == "milestones")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Badge Awards *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">🏅 Badge Awards</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        All badge grants with recipient, team, badge threshold, and whether it was a manual honorary grant.
+                    </p>
+                    <button class="btn btn-primary mt-auto @(_downloading == "badges" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("badges", "badge-awards")'>
+                        @if (_downloading == "badges")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Executive Summary *@
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-primary">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title text-primary">📊 Executive Summary</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        Headline metrics, route progress, and top-10 individual and team leaderboard snapshots for leadership review.
+                    </p>
+                    <button class="btn btn-outline-primary mt-auto @(_downloading == "executive-summary" ? "disabled" : "")"
+                            @onclick='() => DownloadAsync("executive-summary", "executive-summary")'>
+                        @if (_downloading == "executive-summary")
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        Download CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+}
+
+@code {
+    private Toast _toast = default!;
+    private EventDto? _activeEvent;
+    private List<TeamDto> _teams = [];
+    private bool _isLoading = true;
+    private string? _downloading;
+
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private Guid? _teamId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _activeEvent = await EventService.GetActiveEventAsync();
+            if (_activeEvent is not null)
+            {
+                var teams = await TeamService.GetAllAsync(_activeEvent.Id);
+                _teams = teams?.ToList() ?? [];
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError("Failed to load event data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task DownloadAsync(string reportKey, string filePrefix)
+    {
+        if (_activeEvent is null || _downloading is not null)
+            return;
+
+        _downloading = reportKey;
+        try
+        {
+            var bytes = reportKey switch
+            {
+                "participants" => await ReportService.GetParticipantsReportAsync(
+                    _activeEvent.Id, _startDate, _endDate, _teamId),
+                "activities" => await ReportService.GetActivitiesReportAsync(
+                    _activeEvent.Id, _startDate, _endDate, _teamId),
+                "teams" => await ReportService.GetTeamTotalsReportAsync(
+                    _activeEvent.Id, _startDate, _endDate),
+                "milestones" => await ReportService.GetMilestonesReportAsync(_activeEvent.Id),
+                "badges" => await ReportService.GetBadgeAwardsReportAsync(
+                    _activeEvent.Id, _startDate, _endDate, _teamId),
+                "executive-summary" => await ReportService.GetExecutiveSummaryReportAsync(_activeEvent.Id),
+                _ => throw new InvalidOperationException($"Unknown report: {reportKey}")
+            };
+
+            var fileName = $"{filePrefix}-{DateTime.UtcNow:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "text/csv", bytes);
+            _toast.ShowSuccess($"{fileName} downloaded.");
+        }
+        catch (HttpRequestException)
+        {
+            _toast.ShowError($"Failed to generate {reportKey} report.");
+        }
+        finally
+        {
+            _downloading = null;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _startDate = null;
+        _endDate = null;
+        _teamId = null;
+    }
+}
